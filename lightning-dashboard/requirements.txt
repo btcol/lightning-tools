@@ -1,0 +1,5 @@
+# Utiliza Tkinter (incluido en las variables built-in de Python estándar)
+# Las operaciones graficadoras de core necesitan:
+pandas>=2.0.0
+plotly>=5.0.0
+networkx>=3.0
