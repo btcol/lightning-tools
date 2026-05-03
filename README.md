@@ -1,15 +1,15 @@
-<<<<<<< HEAD
 # lightning-tools
-multiples herramientas  para administrar de forma mas amigable los nodos en lightning network, esta basado en comandos LNCLI  y python
-=======
-# Entorno de Nodos Lightning (Testnet4)
+
+Multiples herramientas para administrar de forma mas amigable los nodos en Lightning Network, basado en comandos LNCLI y Python.
+
+## Entorno de Nodos Lightning (Testnet4)
 
 Este directorio contiene herramientas primarias de CLI (línea de comandos) para gestionar un nodo Lightning LND operando en `testnet4`. Incluye rutinas para inicialización rápida, generación gráfica 3D del estado de la red y scripts base para rebalanceo circular de canales.
 
 Ajusta las variables de entorno segun tu sistema operativo, las pruebas se han realizado en la red testnet4 pero sirve para cualquier red, segun la necesidad, solo configure correctamente las variables de entorno que se encuentran al inicio de cada script.
 
 ## Funcionamiento del Software
-El conjunto de utilidades funciona interactuando directamente con la interfaz de línea de comandos (CLI) de `lnd` (`lncli`) y `bitcoind`. Los scripts bash se encargaban de la comunicación de bajo nivel para administrar operaciones diarias (consultas de peers, pagos on-chain, generación de facturas). Paralelamente, los scripts de Python asumian las tareas computacionalmente pesadas: procesaban el grafo público de canales mediante algoritmos de búsqueda, filtraban topologías complejas y estructuraban los datos para generar representaciones visuales interactivas en 3D de la Lightning Network de manera local sin depender de servidores externos.
+El conjunto de utilidades funciona interactuando directamente con la interfaz de línea de comandos (CLI) de `lnd` (`lncli`) y `bitcoind`. Los scripts bash se encargaban de la comunicación de bajo nivel para administrar operaciones diarias (consultas de peers, pagos on-chain, generación de facturas). Paralelamente, los scripts de Python asumian las tareas computacionalmente pesadas: procesaban el grafo público de canales mediante algoritmos de búsqueda, filtraban topologías complejas y estructuran los datos para generar representaciones visuales interactivas en 3D de la Lightning Network de manera local sin depender de servidores externos.
 
 ## Componentes Principales
 - `nodo_testnet4.sh`: Inicializa `bitcoind` y `lnd` sobre la testnet4, junto al entorno base de billeteras on-chain.
@@ -34,6 +34,3 @@ Además requiere de `bitcoin-cli`, `lnd`, `lncli`, y utilería como `jq` instala
 ## Créditos y Derechos de Uso
 
 En caso de utilizar partes de este repositorio o su totalidad para tus propios proyectos, debes mencionar a los autores originales. Atribución requerida: **[btcol](https://github.com/btcol)** en GitHub.
-
-
->>>>>>> e4dfe02 (Commit genesis)
