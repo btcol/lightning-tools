@@ -18,7 +18,7 @@ screen -dmS lnd bash -c 'lnd --bitcoin.testnet4; exec bash'
 
 # Esperar a que lnd se inicie
 echo "Esperando a que LND abra el puerto RPC..."
-while ~/go/bin/lncli --network=testnet4 state 2>&1 | grep -q "connection refused"; do
+while lncli --network=testnet4 state 2>&1 | grep -q "connection refused"; do
     sleep 3
 done
 sleep 2 # Margen de seguridad extra

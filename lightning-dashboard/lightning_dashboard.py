@@ -127,6 +127,16 @@ class LightningDashboard(tk.Tk):
         cmb_hops.pack(side=tk.RIGHT, padx=(0, 5))
         ttk.Label(top, text="Saltos:").pack(side=tk.RIGHT)
 
+        # Controles de Auto-Escaneo
+        self.var_auto_scan = tk.BooleanVar(value=False)
+        self.var_auto_scan_secs = tk.StringVar(value="60")
+        
+        chk_auto = ttk.Checkbutton(top, text="🔄 Auto-Escaneo (s):", variable=self.var_auto_scan, command=self._toggle_auto_scan)
+        chk_auto.pack(side=tk.LEFT, padx=(20, 5))
+        
+        ent_auto = ttk.Entry(top, textvariable=self.var_auto_scan_secs, width=5)
+        ent_auto.pack(side=tk.LEFT)
+
         # Log
         self.log_net = scrolledtext.ScrolledText(self.tab_network, height=25, bg=core.CLR_PANEL, fg=core.CLR_GREEN, font=("Consolas", 10))
         self.log_net.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -169,6 +179,48 @@ class LightningDashboard(tk.Tk):
                     log_ui(f"❌ No se pudo abrir navegador: {e}")
         
         threading.Thread(target=generate, daemon=True).start()
+
+    def _toggle_auto_scan(self):
+        if self.var_auto_scan.get():
+            self.log_net.insert(tk.END, f"\n[🕒] Auto-escaneo activado cada {self.var_auto_scan_secs.get()} segundos.\n", "info")
+            self._auto_scan_loop()
+        else:
+            self.log_net.insert(tk.END, "\n[⏹] Auto-escaneo desactivado.\n")
+
+    def _auto_scan_loop(self):
+        if not self.var_auto_scan.get():
+            return
+
+        # 1. Ejecutar escaneo
+        max_hops = int(self.var_hops.get())
+        self.log_net.insert(tk.END, f"\n[⚙] Auto-escaneo en curso ({datetime.now().strftime('%H:%M:%S')})...\n")
+        
+        def run_cycle():
+            # Escaneo
+            script = core.SCRIPTS_DIR / "01_scan_network.sh"
+            env = os.environ.copy()
+            env["MAX_HOPS"] = str(max_hops)
+            try:
+                subprocess.run(["bash", str(script)], capture_output=True, env=env)
+                
+                # Regenerar HTML (silenciosamente)
+                def log_dummy(m): pass
+                core.generate_3d_html(core.CSV_FILE, core.HTML_FILE, self.my_pubkey, log_dummy)
+                
+                self.log_net.insert(tk.END, "✅ Ciclo de auto-escaneo completado.\n")
+                self.log_net.see(tk.END)
+            except Exception as e:
+                self.log_net.insert(tk.END, f"❌ Error en auto-escaneo: {e}\n")
+
+            # Programar siguiente ciclo
+            try:
+                wait_ms = int(self.var_auto_scan_secs.get()) * 1000
+                if wait_ms < 10000: wait_ms = 10000 # mínimo 10s para seguridad
+                self.after(wait_ms, self._auto_scan_loop)
+            except:
+                self.after(60000, self._auto_scan_loop)
+
+        threading.Thread(target=run_cycle, daemon=True).start()
 
     # =========================================================================
     # PANEL B: PEERS

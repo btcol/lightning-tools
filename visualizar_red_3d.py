@@ -513,6 +513,29 @@ SEARCH_JS = f"""
   row.appendChild(btn);
   row.appendChild(clearBtn);
   panel.appendChild(row);
+  panel.insertAdjacentHTML('beforeend', `
+    <div style="font-weight:bold;color:#fff;margin-bottom:4px;font-size:13px;margin-top:10px;">ℹ️ Leyenda de Nodos</div>
+    <div><span style="font-size:14px;">◉</span> <b>Tamaño:</b> Proporcional al Nº de canales</div>
+    <div><span style="font-size:14px;">🎨</span> <b>Color:</b> Último chisme (gossip)</div>
+    <div style="display:flex;align-items:center;margin-top:4px;">
+      <span style="background:#50e664;width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;"></span> Reciente (< 30 días)
+    </div>
+    <div style="display:flex;align-items:center;margin-top:2px;">
+      <span style="background:#f03264;width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;"></span> Inactivo (> 30 días)
+    </div>
+    <hr style="border:0;border-top:1px solid rgba(255,255,255,0.2);margin:8px 0;width:100%;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <label for="camSpeed" style="cursor:pointer;font-weight:bold;color:#00ffed;">↻ Auto-Giro:</label>
+      <input type="range" id="camSpeed" min="0" max="50" value="6" style="width:80px;cursor:pointer;">
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;">
+      <label for="autoReload" style="cursor:pointer;font-weight:bold;color:#ffcc00;">🔁 Auto-Refresco:</label>
+      <div style="display:flex;align-items:center;gap:5px;">
+        <input type="checkbox" id="autoReload" style="cursor:pointer;">
+        <input type="number" id="reloadSecs" value="30" min="5" style="width:35px;background:#000;color:#ffcc00;border:1px solid #ffcc00;font-size:10px;text-align:center;">
+      </div>
+    </div>
+  `);
   panel.appendChild(status);
   document.body.appendChild(panel);
 
@@ -536,6 +559,7 @@ SEARCH_JS = f"""
     if (!gd) return;
     
     const q = input.value.trim();
+    sessionStorage.setItem('savedSearchQuery', q);
     if (!q) {{ removeSearchTrace(); status.style.display='none'; return; }}
 
     // Buscar por pubkey exacta, prefijo o alias (case-insensitive)
@@ -623,6 +647,7 @@ SEARCH_JS = f"""
   function doClear() {{
     input.value = '';
     removeSearchTrace();
+    sessionStorage.removeItem('savedSearchQuery');
     
     // Restaurar solo las anotaciones sin la búsqueda
     const gd = getGd();
@@ -638,7 +663,69 @@ SEARCH_JS = f"""
   clearBtn.addEventListener('click', doClear);
   input.addEventListener('keydown', e => {{ if (e.key === 'Enter') doSearch(); }});
 
+  // LÓGICA DE AUTO-REFRESCO (Persistente)
+  const autoReloadCheck = document.getElementById('autoReload');
+  const reloadSecsInput = document.getElementById('reloadSecs');
+  
+  autoReloadCheck.checked = localStorage.getItem('autoReload') === 'true';
+  reloadSecsInput.value = localStorage.getItem('reloadSecs') || '30';
+
+  let reloadTimer = null;
+  const startReloadTimer = () => {{
+    if (reloadTimer) clearTimeout(reloadTimer);
+    if (autoReloadCheck.checked) {{
+      const ms = Math.max(5, parseInt(reloadSecsInput.value)) * 1000;
+      reloadTimer = setTimeout(() => {{ 
+         console.log('Auto-refrescando gráfica...');
+         const gd = getGd();
+         if (gd && gd.layout && gd.layout.scene && gd.layout.scene.camera) {{
+             sessionStorage.setItem('savedCamera', JSON.stringify(gd.layout.scene.camera));
+         }}
+         const slider = document.getElementById('camSpeed');
+         if (slider) sessionStorage.setItem('savedCamSpeed', slider.value);
+         location.reload(); 
+      }}, ms);
+    }}
+  }};
+
+  autoReloadCheck.onchange = () => {{
+    localStorage.setItem('autoReload', autoReloadCheck.checked);
+    startReloadTimer();
+  }};
+  reloadSecsInput.onchange = () => {{
+    localStorage.setItem('reloadSecs', reloadSecsInput.value);
+    if (autoReloadCheck.checked) startReloadTimer();
+  }};
+
+  // Eliminar flash blanco
+  document.body.style.backgroundColor = 'rgb(10,10,20)';
+
+  // Restaurar estado de cámara previo al refresco
+  setTimeout(() => {{
+      const gd = getGd();
+      if (gd) {{
+          const savedCamStr = sessionStorage.getItem('savedCamera');
+          if (savedCamStr) {{
+              try {{
+                  Plotly.relayout(gd, {{'scene.camera': JSON.parse(savedCamStr)}});
+              }} catch(e) {{}}
+          }}
+      }}
+      const savedCamSpeed = sessionStorage.getItem('savedCamSpeed');
+      if (savedCamSpeed) {{
+          const slider = document.getElementById('camSpeed');
+          if (slider) slider.value = savedCamSpeed;
+      }}
+      
+      const savedSearchQuery = sessionStorage.getItem('savedSearchQuery');
+      if (savedSearchQuery) {{
+          input.value = savedSearchQuery;
+          doSearch();
+      }}
+  }}, 100);
+
   console.log('Buscador inicializado. Nodos interactivos disponibles.');
+  startReloadTimer();
 }})();
 """
 

@@ -795,6 +795,13 @@ def generate_3d_html(csv_path: Path, html_path: Path,
       <label for="camSpeed" style="cursor:pointer;font-weight:bold;color:#00ffed;">↻ Auto-Giro:</label>
       <input type="range" id="camSpeed" min="0" max="50" value="6" style="width:80px;cursor:pointer;">
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;">
+      <label for="autoReload" style="cursor:pointer;font-weight:bold;color:#ffcc00;">🔁 Auto-Refresco:</label>
+      <div style="display:flex;align-items:center;gap:5px;">
+        <input type="checkbox" id="autoReload" style="cursor:pointer;">
+        <input type="number" id="reloadSecs" value="30" min="5" style="width:35px;background:#000;color:#ffcc00;border:1px solid #ffcc00;font-size:10px;text-align:center;">
+      </div>
+    </div>
   `;
   document.body.appendChild(leg);
 
@@ -806,7 +813,8 @@ def generate_3d_html(csv_path: Path, html_path: Path,
   }}
   function doSearch() {{
     const gd=getGd(); if(!gd) return;
-    const q=input.value.trim(); if(!q){{removeSearchTrace();status.style.display='none';return;}}
+    const q=input.value.trim(); sessionStorage.setItem('savedSearchQuery', q);
+    if(!q){{removeSearchTrace();status.style.display='none';return;}}
     const ql=q.toLowerCase();
     let found=NODE_LOOKUP[q]||NODE_LOOKUP[q.slice(0,20)]||NODE_LOOKUP[ql];
     if(!found) for(const [k,v] of Object.entries(NODE_LOOKUP))
@@ -834,7 +842,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     status.style.color='#aaffee'; status.style.display='block';
   }}
   function doClear() {{
-    input.value=''; removeSearchTrace();
+    input.value=''; removeSearchTrace(); sessionStorage.removeItem('savedSearchQuery');
     const gd=getGd(); if(gd){{
       const cur=gd.layout.scene.annotations||[];
       Plotly.relayout(gd,{{'scene.annotations':cur.filter(a=>!a.text.startsWith('<b>🔍'))}});
@@ -908,7 +916,69 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     }});
   }}
   
-  // Iniciar loop
+  // LÓGICA DE AUTO-REFRESCO (Persistente)
+  const autoReloadCheck = document.getElementById('autoReload');
+  const reloadSecsInput = document.getElementById('reloadSecs');
+  
+  autoReloadCheck.checked = localStorage.getItem('autoReload') === 'true';
+  reloadSecsInput.value = localStorage.getItem('reloadSecs') || '30';
+
+  let reloadTimer = null;
+  const startReloadTimer = () => {{
+    if (reloadTimer) clearTimeout(reloadTimer);
+    if (autoReloadCheck.checked) {{
+      const ms = Math.max(5, parseInt(reloadSecsInput.value)) * 1000;
+      reloadTimer = setTimeout(() => {{ 
+         console.log('Auto-refrescando gráfica...');
+         const gd = getGd();
+         if (gd && gd.layout && gd.layout.scene && gd.layout.scene.camera) {{
+             sessionStorage.setItem('savedCamera', JSON.stringify(gd.layout.scene.camera));
+         }}
+         const slider = document.getElementById('camSpeed');
+         if (slider) sessionStorage.setItem('savedCamSpeed', slider.value);
+         location.reload(); 
+      }}, ms);
+    }}
+  }};
+
+  autoReloadCheck.onchange = () => {{
+    localStorage.setItem('autoReload', autoReloadCheck.checked);
+    startReloadTimer();
+  }};
+  reloadSecsInput.onchange = () => {{
+    localStorage.setItem('reloadSecs', reloadSecsInput.value);
+    if (autoReloadCheck.checked) startReloadTimer();
+  }};
+
+  // Eliminar flash blanco
+  document.body.style.backgroundColor = 'rgb(10,10,20)';
+
+  // Restaurar estado de cámara previo al refresco
+  setTimeout(() => {{
+      const gd = getGd();
+      if (gd) {{
+          const savedCamStr = sessionStorage.getItem('savedCamera');
+          if (savedCamStr) {{
+              try {{
+                  Plotly.relayout(gd, {{'scene.camera': JSON.parse(savedCamStr)}});
+              }} catch(e) {{}}
+          }}
+      }}
+      const savedCamSpeed = sessionStorage.getItem('savedCamSpeed');
+      if (savedCamSpeed) {{
+          const slider = document.getElementById('camSpeed');
+          if (slider) slider.value = savedCamSpeed;
+      }}
+      
+      const savedSearchQuery = sessionStorage.getItem('savedSearchQuery');
+      if (savedSearchQuery) {{
+          input.value = savedSearchQuery;
+          doSearch();
+      }}
+  }}, 100);
+
+  // Iniciar loops
+  startReloadTimer();
   requestAnimationFrame(rotateCamera);
 }})();
 """
