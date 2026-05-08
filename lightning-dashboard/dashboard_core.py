@@ -42,7 +42,8 @@ LNCLI_BIN = os.environ.get("LNCLI_BIN", "lncli-debug")
 BASE_DIR    = Path(__file__).parent.resolve()
 SCRIPTS_DIR = BASE_DIR / "scripts"
 DATA_DIR    = BASE_DIR / "data"
-EXPORTS_DIR = BASE_DIR / "exports"
+EXPORTS_DIR  = BASE_DIR / "exports"
+BACKUPS_DIR  = BASE_DIR / "backups"
 
 # Archivo CSV generado por 01_scan_network.sh
 CSV_FILE  = DATA_DIR / "lightning_network.csv"
@@ -58,17 +59,21 @@ TARGET_RATIO          = 50   # % de balance local objetivo
 MIN_SHIFT_SATS        = 1000 # sats mínimos para sugerir rebalanceo
 
 # Colores del tema oscuro
-CLR_BG       = "#0a0a14"   # fondo principal
-CLR_PANEL    = "#12121e"   # fondo de paneles
+CLR_BG       = "#07070f"   # fondo principal  (igual que cockpit --bg)
+CLR_PANEL    = "#0d0d1e"   # fondo de paneles  (igual que cockpit --panel)
 CLR_ACCENT   = "#00dcff"   # cian eléctrico (acento)
 CLR_ACCENT2  = "#7b2fff"   # violeta (acento secundario)
 CLR_GOLD     = "#ffd700"   # dorado (mi nodo)
 CLR_GREEN    = "#00ff88"   # verde (éxito / activo)
 CLR_RED      = "#ff4466"   # rojo (error / deshabilitado)
 CLR_YELLOW   = "#ffcc00"   # amarillo (advertencia)
-CLR_TEXT     = "#e0e0f0"   # texto principal
+CLR_TEXT     = "#d0d8f0"   # texto principal
 CLR_SUBTEXT  = "#8888aa"   # texto secundario
-CLR_BORDER   = "#2a2a40"   # bordes
+CLR_BORDER   = "#1a1a35"   # bordes
+
+# Fuente base (disponible en Linux/Windows/Mac)
+_FONT_UI   = "DejaVu Sans"
+_FONT_MONO = "DejaVu Sans Mono"
 
 
 # =============================================================================
@@ -401,7 +406,7 @@ def execute_rebalance(from_scid: str, to_pub: str, amt_sats: int,
         return False
 
 
-def get_channel_candidates(min_channels=3, max_days=30):
+def get_channel_candidates(min_channels=2, max_days=60):
     """
     Lee la red desde el graph local (getnetworkinfo / describegraph) para
     encontrar nodos saludables con los que NO tenemos canal.
@@ -465,41 +470,81 @@ def get_channel_candidates(min_channels=3, max_days=30):
     return candidates[:100]
 
 
-def execute_openchannel(pubkey: str, amt_sats: int, log_callback) -> bool:
+def execute_connect(uri: str, log_callback) -> bool:
+    """
+    Establece una conexión P2P con un nodo usando su URI completa (pubkey@host:port).
+    Devuelve True si la conexión es exitosa o ya existía.
+    """
     log = log_callback
-    
-    # 1. Intentar obtener la URI del nodo (host)
-    log(f"[1/3] Consultando direcciones para {pubkey[:16]}...")
-    host = None
+    log(f"[connect] Intentando conectar a {uri} ...")
+    cmd = [LNCLI_BIN, f"-network={NETWORK}", "connect", uri]
     try:
-        info = run_lncli("getnodeinfo", f"--pub_key={pubkey}")
-        addrs = info.get("node", {}).get("addresses", [])
-        if addrs:
-            host = addrs[0]["addr"]
-            log(f"   Encontrado: {host}")
-        else:
-            log("   ⚠️ No se encontraron p2p_addresses públicas en el graph para este nodo.")
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        out = (res.stdout + res.stderr).strip()
+        if "already connected to peer" in out:
+            log("   ✅ Ya estás conectado a este peer.")
+            return True
+        if res.returncode == 0:
+            log("   ✅ Conexión P2P establecida.")
+            return True
+        log(f"   ❌ Fallo en connect (código {res.returncode}): {out[:200]}")
+        return False
+    except subprocess.TimeoutExpired:
+        log("   ❌ Timeout esperando respuesta del nodo remoto.")
+        return False
     except Exception as e:
-        log(f"   ⚠️ Fallo al obtener info del nodo: {e}")
-        
-    # 2. Conectar al nodo si tenemos el host
+        log(f"   ❌ Excepción en connect: {e}")
+        return False
+
+
+def execute_openchannel(pubkey: str, amt_sats: int, log_callback,
+                        host_uri: str = None) -> bool:
+    """
+    Abre un canal con el nodo indicado.
+    - Si se pasa host_uri (pubkey@ip:port), usa ese para conectar directamente.
+    - Si no, intenta obtener la dirección del grafo de la red.
+    """
+    log = log_callback
+
+    # 1. Determinar URI de conexión: parámetro directo > grafo interno
+    log(f"[1/3] Resolviendo dirección de conexión para {pubkey[:16]}...")
+    host = None
+    if host_uri:
+        # URI proporcionada directamente (pubkey@ip:port)
+        host = host_uri.split("@", 1)[1] if "@" in host_uri else host_uri
+        log(f"   Usando URI externa: {host_uri}")
+    else:
+        try:
+            info = run_lncli("getnodeinfo", f"--pub_key={pubkey}")
+            addrs = info.get("node", {}).get("addresses", [])
+            if addrs:
+                host = addrs[0]["addr"]
+                log(f"   Dirección del grafo: {host}")
+            else:
+                log("   ⚠️ No se encontraron p2p_addresses en el grafo.")
+        except Exception as e:
+            log(f"   ⚠️ Fallo al consultar el grafo: {e}")
+
+    # 2. Conectar P2P
     if host:
-        uri = f"{pubkey}@{host}"
+        uri = host_uri if host_uri else f"{pubkey}@{host}"
         log(f"[2/3] Conectando a {uri} ...")
         cmd_conn = [LNCLI_BIN, f"-network={NETWORK}", "connect", uri]
         try:
-            res = subprocess.run(cmd_conn, capture_output=True, text=True, timeout=15)
+            res = subprocess.run(cmd_conn, capture_output=True, text=True, timeout=20)
             out = res.stdout + res.stderr
             if "already connected to peer" in out:
                 log("   Ya conectado.")
             elif res.returncode == 0:
                 log("   ✅ Conexión P2P exitosa.")
             else:
-                log(f"   ⚠️ Fallo en connect: {out.strip()}")
+                log(f"   ⚠️ Fallo en connect: {out.strip()[:200]}")
+        except subprocess.TimeoutExpired:
+            log("   ⚠️ Timeout en connect. Intentando openchannel de todas formas...")
         except Exception as e:
             log(f"   ⚠️ Error en connect: {e}")
     else:
-        log("[2/3] Saltando conexión directa, confiando en tabla de ruteo interna...")
+        log("[2/3] Sin dirección conocida. Confiando en la tabla de ruteo interna...")
 
     # 3. Ejecutar openchannel
     log(f"[3/3] Abriendo canal con un fondo local de {amt_sats:,} sats...")
@@ -526,6 +571,269 @@ def execute_openchannel(pubkey: str, amt_sats: int, log_callback) -> bool:
     except Exception as e:
         log(f"❌ Excepción ejecutando openchannel: {e}")
         return False
+
+
+# =============================================================================
+# LEER HISTORIAL SQLite PARA EL COCKPIT
+# =============================================================================
+
+import sqlite3 as _sqlite3
+
+# =============================================================================
+# WALLET ON-CHAIN
+# =============================================================================
+
+# Reserva minima recomendada en sats para operacion segura del nodo
+WALLET_MIN_RESERVE_SATS = 50_000
+# Umbral de fragmentacion (numero de UTXOs que dispara advertencia)
+UTXO_FRAGMENT_WARN = 10
+
+
+def get_wallet_balance_detail() -> dict:
+    """
+    Retorna balance on-chain detallado incluyendo:
+    - confirmed / unconfirmed / total
+    - reserved_balance_anchor_chan (reserva para anchor outputs)
+    - pending_closing_sats (fondos en cierres de canal)
+    - pending_open_sats
+    """
+    result = {
+        "confirmed": 0, "unconfirmed": 0, "total": 0,
+        "reserved_anchor": 0,
+        "pending_closing_sats": 0,
+        "pending_open_sats": 0,
+        "error": None,
+    }
+    try:
+        wb = run_lncli("walletbalance")
+        result["confirmed"]       = int(wb.get("confirmed_balance", 0))
+        result["unconfirmed"]     = int(wb.get("unconfirmed_balance", 0))
+        result["total"]           = int(wb.get("total_balance", 0))
+        result["reserved_anchor"] = int(wb.get("reserved_balance_anchor_chan", 0))
+    except Exception as e:
+        result["error"] = str(e)
+
+    try:
+        pc = run_lncli("pendingchannels")
+        closing = pc.get("pending_force_closing_channels", []) + \
+                  pc.get("waiting_close_channels", [])
+        for ch in closing:
+            result["pending_closing_sats"] += int(
+                ch.get("channel", {}).get("local_balance", 0)
+            )
+        for ch in pc.get("pending_open_channels", []):
+            result["pending_open_sats"] += int(
+                ch.get("channel", {}).get("local_balance", 0)
+            )
+    except Exception:
+        pass
+
+    return result
+
+
+def get_wallet_utxos(min_confs: int = 0) -> list:
+    """
+    Lista todos los UTXOs de la wallet on-chain via lncli listunspent.
+    Compatible con el formato real de LND: outpoint como string "txid:index",
+    address_type como entero, amount_sat como entero.
+    """
+    # Mapa de address_type (enum int) -> nombre legible
+    ADDR_TYPE = {
+        0: "p2wkh (bech32)",
+        1: "np2wkh (anidado)",
+        2: "hybrid np2wkh",
+        3: "p2tr (taproot)",
+        4: "p2tr (taproot)",
+    }
+    try:
+        data = run_lncli("listunspent", f"--min_confs={min_confs}")
+        utxos = data.get("utxos", [])
+        result = []
+        for u in utxos:
+            # Outpoint puede ser string "txid:idx" o dict {txid_str, output_index}
+            op = u.get("outpoint", "")
+            if isinstance(op, str) and ":" in op:
+                txid, idx = op.rsplit(":", 1)
+                output_index = int(idx)
+            elif isinstance(op, dict):
+                txid = op.get("txid_str", "")
+                output_index = int(op.get("output_index", 0))
+            else:
+                txid = str(op)
+                output_index = 0
+
+            addr_type_raw = u.get("address_type", 0)
+            addr_type_str = ADDR_TYPE.get(int(addr_type_raw),
+                                          f"tipo {addr_type_raw}")
+
+            result.append({
+                "txid":         txid,
+                "output_index": output_index,
+                "amount_sat":   int(u.get("amount_sat", 0)),
+                "confirmations":int(u.get("confirmations", 0)),
+                "address":      u.get("address", ""),
+                "address_type": addr_type_str,
+            })
+        return result
+    except Exception:
+        return []
+
+
+
+def get_new_address(addr_type: str = "p2wkh") -> str:
+    """
+    Genera una nueva direccion on-chain para recibir fondos.
+    addr_type: 'p2wkh' (bech32/native segwit, recomendado),
+               'np2wkh' (nested segwit), 'p2tr' (taproot, LND >= 0.15)
+    """
+    try:
+        data = run_lncli("newaddress", addr_type)
+        return data.get("address", "")
+    except Exception:
+        return ""
+
+
+def execute_consolidate_utxos(dest_addr: str, sat_per_vbyte: int,
+                               log_callback) -> bool:
+    """
+    Consolida todos los UTXOs enviando todo el saldo a dest_addr.
+    Usa --sweepall para incluir todos los UTXOs en una sola transaccion.
+    ATENCION: esta operacion mueve TODOS los fondos disponibles.
+    """
+    log = log_callback
+    log(f"[1/2] Preparando consolidacion hacia {dest_addr}...")
+    log(f"   Fee rate: {sat_per_vbyte} sat/vbyte")
+    cmd = [
+        LNCLI_BIN, f"-network={NETWORK}",
+        "sendcoins",
+        f"--addr={dest_addr}",
+        "--sweepall",
+        f"--sat_per_vbyte={sat_per_vbyte}",
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        out = (res.stdout + res.stderr).strip()
+        if res.returncode == 0:
+            try:
+                txid = json.loads(res.stdout).get("txid", "?")
+                log(f"[2/2] OK - TXID: {txid}")
+                log("   Los fondos llegaran en la proxima confirmacion del bloque.")
+            except Exception:
+                log(f"[2/2] OK: {out[:200]}")
+            return True
+        else:
+            log(f"[2/2] Error ({res.returncode}): {out[:300]}")
+            return False
+    except subprocess.TimeoutExpired:
+        log("   Timeout esperando respuesta de lncli.")
+        return False
+    except Exception as e:
+        log(f"   Excepcion: {e}")
+        return False
+
+
+def export_channel_backup(output_path: Path, log_callback) -> bool:
+    """
+    Exporta el Static Channel Backup (SCB) de todos los canales activos.
+    output_path: ruta donde guardar el archivo .bin
+    """
+    log = log_callback
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    log(f"[SCB] Exportando backup de canales -> {output_path.name}")
+    cmd = [
+        LNCLI_BIN, f"-network={NETWORK}",
+        "exportchanbackup", "--all",
+        f"--output_file={output_path}",
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        out = (res.stdout + res.stderr).strip()
+        if res.returncode == 0:
+            size = output_path.stat().st_size if output_path.exists() else 0
+            log(f"   OK - {output_path.name} ({size:,} bytes)")
+            return True
+        else:
+            log(f"   Error: {out[:300]}")
+            return False
+    except Exception as e:
+        log(f"   Excepcion: {e}")
+        return False
+
+
+def get_scb_auto_path() -> Path:
+    """Retorna la ruta del SCB automatico que mantiene LND."""
+    lnd_dir = Path.home() / ".lnd" / "data" / "chain" / "bitcoin" / NETWORK
+    return lnd_dir / "channel.backup"
+
+
+def read_history_stats(db_path: Path = None) -> dict:
+    """
+    Lee node_history.db y devuelve un dict con las métricas para el cockpit HUD.
+    Incluye: snapshot más reciente, últimas 24h por hora y últimos 7 días.
+    """
+    if db_path is None:
+        db_path = DATA_DIR / "node_history.db"
+
+    empty = {
+        "snap": {}, "hourly": [], "daily": [],
+        "net_profit_7d_msat": 0,
+        "uptime_pct_7d": 0.0,
+    }
+    if not db_path.exists():
+        return empty
+
+    try:
+        conn = _sqlite3.connect(db_path)
+        conn.row_factory = _sqlite3.Row
+
+        # Snapshot más reciente
+        row = conn.execute(
+            "SELECT * FROM snapshots ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        snap = dict(row) if row else {}
+
+        # Hourly últimas 24h
+        cutoff_h = (int(datetime.now(timezone.utc).timestamp()) // 3600 - 24) * 3600
+        hourly = [
+            dict(r) for r in conn.execute(
+                "SELECT * FROM hourly_stats WHERE hour_ts >= ? ORDER BY hour_ts ASC",
+                (cutoff_h,)
+            ).fetchall()
+        ]
+
+        # Daily últimos 7 días
+        daily = [
+            dict(r) for r in conn.execute(
+                "SELECT * FROM daily_stats ORDER BY date DESC LIMIT 7"
+            ).fetchall()
+        ]
+        daily.reverse()
+
+        # Net profit acumulado 7 días
+        net_7d = sum(d.get("net_profit_msat", 0) for d in daily)
+
+        # Uptime: % snapshots con synced_to_chain=1 en las últimas 24h
+        cutoff_ts = int(datetime.now(timezone.utc).timestamp()) - 86400
+        total_snaps = conn.execute(
+            "SELECT COUNT(*) FROM snapshots WHERE ts >= ?", (cutoff_ts,)
+        ).fetchone()[0]
+        synced_snaps = conn.execute(
+            "SELECT COUNT(*) FROM snapshots WHERE ts >= ? AND synced_to_chain=1",
+            (cutoff_ts,)
+        ).fetchone()[0]
+        uptime_pct = round(synced_snaps / max(total_snaps, 1) * 100, 1)
+
+        conn.close()
+        return {
+            "snap": snap,
+            "hourly": hourly,
+            "daily": daily,
+            "net_profit_7d_msat": net_7d,
+            "uptime_pct_7d": uptime_pct,
+        }
+    except Exception as e:
+        print(f"[WARN] read_history_stats: {e}", file=sys.stderr)
+        return empty
 
 
 # =============================================================================
@@ -986,3 +1294,600 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     fig.write_html(str(html_path), include_plotlyjs="cdn", post_script=SEARCH_JS)
     log_cb(f"✅ HTML guardado en: {html_path.name}")
     return True
+
+
+# =============================================================================
+# COCKPIT HTML — Red 3D + Paneles HUD de Instrumentos
+# =============================================================================
+
+COCKPIT_HTML = """<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>⚡ Lightning Cockpit HUD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#07070f;--panel:#0d0d1e;--cyan:#00dcff;--green:#00ff88;
+    --gold:#ffd700;--red:#ff4466;--amber:#ffcc00;--violet:#7b2fff;
+    --text:#e0e0f0;--sub:#8888aa;--border:rgba(0,220,255,0.35);
+  }
+  html,body{width:100%;height:100%;background:var(--bg);color:var(--text);overflow:hidden;
+    font-family:'Share Tech Mono',monospace;}
+
+  /* ── SCANLINE OVERLAY ── */
+  body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9990;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px);}
+
+  /* ── GRID LAYOUT ── */
+  #cockpit{display:grid;width:100vw;height:100vh;
+    grid-template-areas:"top top top" "left center right" "bottom bottom bottom";
+    grid-template-columns:230px 1fr 230px;
+    grid-template-rows:58px 1fr 138px;}
+
+  /* ── SHARED PANEL STYLE ── */
+  .hud-panel{background:rgba(13,13,30,.92);border-color:var(--border);
+    backdrop-filter:blur(6px);}
+
+  /* ── TOP BAR ── */
+  #hud-top{grid-area:top;border-bottom:1px solid var(--border);
+    box-shadow:0 0 18px rgba(0,220,255,.25);display:flex;align-items:center;
+    padding:0 16px;gap:10px;z-index:100;}
+  #hud-top .logo{font-family:'Orbitron',sans-serif;font-weight:900;font-size:17px;
+    color:var(--cyan);letter-spacing:2px;white-space:nowrap;margin-right:8px;
+    text-shadow:0 0 12px var(--cyan);}
+  .top-seg{display:flex;flex-direction:column;align-items:center;
+    padding:0 10px;border-left:1px solid rgba(0,220,255,.2);min-width:90px;}
+  .top-seg .lbl{font-size:12px;color:var(--sub);letter-spacing:1px;text-transform:uppercase;}
+  .top-seg .val{font-size:17px;color:var(--cyan);font-weight:bold;white-space:nowrap;}
+  #sync-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px;
+    box-shadow:0 0 8px currentColor;}
+  .synced{color:var(--green)}.unsynced{color:var(--red)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .pulse{animation:pulse 1.5s ease-in-out infinite}
+
+  /* ── LEFT PANEL ── */
+  #hud-left{grid-area:left;border-right:1px solid var(--border);
+    box-shadow:0 0 20px rgba(0,220,255,.18) inset;padding:12px 10px;
+    display:flex;flex-direction:column;gap:10px;overflow:hidden;}
+
+  /* ── RIGHT PANEL ── */
+  #hud-right{grid-area:right;border-left:1px solid var(--border);
+    box-shadow:0 0 20px rgba(0,220,255,.18) inset;padding:12px 10px;
+    display:flex;flex-direction:column;gap:10px;overflow:hidden;}
+
+  /* ── CENTER ── */
+  #hud-center{grid-area:center;position:relative;overflow:hidden;}
+  #hud-center iframe{width:100%;height:100%;border:none;display:block;}
+
+  /* ── BOTTOM BAR ── */
+  #hud-bottom{grid-area:bottom;border-top:1px solid var(--border);
+    box-shadow:0 0 18px rgba(0,220,255,.2);display:flex;align-items:stretch;
+    padding:8px 12px;gap:12px;overflow:hidden;}
+
+  /* ── INSTRUMENT CARD ── */
+  .card{background:rgba(5,5,18,.7);border:1px solid rgba(0,220,255,.22);
+    border-radius:6px;padding:8px 10px;}
+  .card-title{font-size:12px;color:var(--sub);letter-spacing:1.5px;
+    text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:4px;}
+  .card-val{font-size:26px;font-family:'Orbitron',sans-serif;color:var(--cyan);
+    line-height:1.1;text-shadow:0 0 10px rgba(0,220,255,.5);}
+  .card-val.green{color:var(--green);text-shadow:0 0 10px rgba(0,255,136,.5)}
+  .card-val.amber{color:var(--amber);text-shadow:0 0 10px rgba(255,204,0,.5)}
+  .card-val.red{color:var(--red);text-shadow:0 0 10px rgba(255,68,102,.5)}
+  .card-sub{font-size:12px;color:var(--sub);margin-top:2px;}
+
+  /* ── GAUGE SVG ── */
+  .gauge-wrap{display:flex;justify-content:center;align-items:center;padding:4px 0;}
+
+  /* ── BAR METER ── */
+  .bar-meter{height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin-top:4px;}
+  .bar-fill{height:100%;border-radius:4px;transition:width .8s ease;}
+
+  /* ── SPARKLINE ── */
+  .spark-wrap{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .spark-title{font-size:12px;color:var(--sub);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;}
+  .spark-wrap svg{width:100%;height:60px;}
+
+  /* ── BOTTOM SEGMENTS ── */
+  .bot-seg{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;
+    border-right:1px solid rgba(0,220,255,.12);padding-right:10px;}
+  .bot-seg:last-child{border-right:none;padding-right:0;}
+  .bot-label{font-size:12px;color:var(--sub);letter-spacing:1px;text-transform:uppercase;}
+  .bot-val{font-family:'Orbitron',sans-serif;font-size:22px;color:var(--cyan);}
+  .bot-val.pos{color:var(--green)}.bot-val.neg{color:var(--red)}
+
+  /* ── DIVIDER ── */
+  .hdiv{height:1px;background:rgba(0,220,255,.15);margin:2px 0;}
+
+
+  /* ── TOOLTIP (JS-driven, never clipped by overflow:hidden) ── */
+  .tip{cursor:help;}
+  #hud-floatip{
+    position:fixed;z-index:99999;display:none;
+    background:rgba(4,4,20,0.97);
+    border:1px solid rgba(0,220,255,0.55);
+    color:#d0d8f0;font-size:11.5px;line-height:1.6;
+    padding:10px 14px;border-radius:8px;
+    white-space:pre-line;max-width:260px;
+    box-shadow:0 0 18px rgba(0,220,255,0.35);
+    font-family:'Share Tech Mono',monospace;
+    pointer-events:none;
+  }
+
+  /* ── CORNER DECO ── */
+  .corner-tl,.corner-tr,.corner-bl,.corner-br{position:absolute;width:12px;height:12px;z-index:10;}
+  .corner-tl{top:0;left:0;border-top:2px solid var(--cyan);border-left:2px solid var(--cyan);}
+  .corner-tr{top:0;right:0;border-top:2px solid var(--cyan);border-right:2px solid var(--cyan);}
+  .corner-bl{bottom:0;left:0;border-bottom:2px solid var(--cyan);border-left:2px solid var(--cyan);}
+  .corner-br{bottom:0;right:0;border-bottom:2px solid var(--cyan);border-right:2px solid var(--cyan);}
+</style>
+</head>
+<body>
+<div id="cockpit">
+
+  <!-- TOP BAR -->
+  <div id="hud-top" class="hud-panel">
+    <div class="logo">⚡ LN·COCKPIT</div>
+    <div class="top-seg tip" data-tip="Alias del nodo anunciado al grafo Lightning.
+Debe coincidir con lnd.conf.">
+      <span class="lbl">Nodo</span>
+      <span class="val" id="t-alias">—</span>
+    </div>
+    <div class="top-seg tip" data-tip="🟢 OK = sincronizado y operativo.
+🔴 NO = offline o atrasado.
+Ningún pago se enruta si NO está sincronizado.">
+      <span class="lbl">Sync</span>
+      <span class="val" id="t-sync"><span id="sync-dot"></span><span id="sync-txt">—</span></span>
+    </div>
+    <div class="top-seg tip" data-tip="Altura de bloque que conoce el nodo.
+Debe estar al día con la red.
+&gt;6 bloques de atraso = problema de sync.">
+      <span class="lbl">Bloque</span>
+      <span class="val" id="t-block">—</span>
+    </div>
+    <div class="top-seg tip" data-tip="Peers P2P conectados actualmente.
+Óptimo: ≥3 peers activos.
+&lt;2 = riesgo de aislamiento de la red.">
+      <span class="lbl">Peers</span>
+      <span class="val" id="t-peers">—</span>
+    </div>
+    <div class="top-seg tip" data-tip="Saldo on-chain confirmado.
+Mantener reserva para abrir canales.
+Demasiado on-chain = capital sin trabajar.">
+      <span class="lbl">Wallet</span>
+      <span class="val" id="t-wallet">—</span>
+    </div>
+    <div class="top-seg tip" data-tip="% de tiempo online en las últimas 24h.
+100% = nodo siempre operativo.
+&lt;95% = reinicios o problemas de red frecuentes.">
+      <span class="lbl">Uptime 24h</span>
+      <span class="val" id="t-uptime">—</span>
+    </div>
+    <div style="flex:1"></div>
+    <div class="top-seg" style="border-left:none;">
+      <span class="lbl">Hora</span>
+      <span class="val" id="t-clock">—</span>
+    </div>
+  </div>
+
+  <!-- LEFT PANEL: Canales & Liquidez -->
+  <div id="hud-left" class="hud-panel">
+    <!-- Canales activos/inactivos -->
+    <div class="card tip" data-tip="Ideal: ≥80% de canales activos.
+Inactivos = peer desconectado.
+Si persiste &gt;24h, considera cerrar el canal.">
+      <div class="card-title">📡 Canales</div>
+      <div class="card-val" id="l-ch-active">—</div>
+      <div class="card-sub">activos / <span id="l-ch-total">—</span> total</div>
+      <div class="bar-meter" style="margin-top:6px;">
+        <div class="bar-fill" id="l-ch-bar" style="background:var(--green);width:0%"></div>
+      </div>
+    </div>
+    <!-- Gauge liquidez -->
+    <div class="card tip" data-tip="Óptimo: 40–60%.
+&lt;20% = sin liquidez saliente (no puedes enviar).
+&gt;80% = sin liquidez entrante (no puedes recibir).
+Equilibrio = más enrutamiento posible.">
+      <div class="card-title">💧 Liquidez Local</div>
+      <div class="gauge-wrap">
+        <svg width="110" height="70" viewBox="0 0 110 70">
+          <path d="M10,65 A50,50 0 0,1 100,65" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10" stroke-linecap="round"/>
+          <path id="gauge-arc" d="M10,65 A50,50 0 0,1 100,65" fill="none" stroke="var(--green)" stroke-width="10" stroke-linecap="round"
+            stroke-dasharray="157" stroke-dashoffset="157"/>
+          <text x="55" y="62" text-anchor="middle" fill="var(--cyan)" font-family="Orbitron,sans-serif" font-size="18" id="gauge-pct">—%</text>
+        </svg>
+      </div>
+      <div class="card-sub" style="text-align:center">Local / (Local+Remote)</div>
+    </div>
+    <!-- Capacidad total -->
+    <div class="card tip" data-tip="Sats totales bloqueados en canales.
+A mayor capacidad, más atractivo como hub.
+Mainnet: nodos relevantes &gt;10M sats.
+Capital en on-chain = capital sin trabajar.">
+      <div class="card-title">⚡ Capacidad Total</div>
+      <div class="card-val" style="font-size:21px;" id="l-capacity">—</div>
+      <div class="card-sub">sats en canales</div>
+    </div>
+    <!-- Zombies -->
+    <div class="card tip" data-tip="Ideal: 0.
+Canal activo sin actualizaciones en &gt;7 días.
+Capital inmovilizado e improductivo.
+Considera cerrar zombies persistentes.">
+      <div class="card-title">🧟 Zombies</div>
+      <div class="card-val" id="l-zombies">—</div>
+      <div class="card-sub" id="l-zombie-cap">— sats inactivos</div>
+    </div>
+  </div>
+
+  <!-- CENTER: iframe con la red 3D -->
+  <div id="hud-center">
+    <div class="corner-tl"></div><div class="corner-tr"></div>
+    <div class="corner-bl"></div><div class="corner-br"></div>
+    <iframe id="graph-frame" src="GRAPH_SRC_PLACEHOLDER" title="Red Lightning 3D"></iframe>
+  </div>
+
+  <!-- RIGHT PANEL: Routing & Rentabilidad -->
+  <div id="hud-right" class="hud-panel">
+    <!-- Fees ganadas acumulado -->
+    <div class="card tip" data-tip="Msat ganados enrutando pagos de terceros.
+Tendencia creciente = nodo utilizado como hub.
+Mainnet: buenos nodos ganan 100k+ msat/mes.
+Testnet4: cifras bajas son normales.">
+      <div class="card-title">📈 Fees Ganadas (cum.)</div>
+      <div class="card-val green" id="r-fees-earned">—</div>
+      <div class="card-sub">msat enrutamiento</div>
+    </div>
+    <!-- Fees pagadas (rebalanceo) -->
+    <div class="card tip" data-tip="Msat pagados en rebalanceos propios.
+Debe ser MENOR que las fees ganadas.
+Si supera lo ganado, estás subsidiando la red.
+Revisa frecuencia y costo de rebalanceos.">
+      <div class="card-title">📉 Fees Pagadas (cum.)</div>
+      <div class="card-val amber" id="r-fees-paid">—</div>
+      <div class="card-sub">msat rebalanceos</div>
+    </div>
+    <!-- Forwards -->
+    <div class="card tip" data-tip="Pagos totales enrutados por tu nodo.
+Vol: sats totales que pasaron por ti.
+Más forwards = mejor posición en la red.
+Forwards grandes = pagos relevantes enrutados.">
+      <div class="card-title">⚡ Forwards (cum.)</div>
+      <div class="card-val" id="r-fwd-count">—</div>
+      <div class="card-sub">Vol: <span id="r-fwd-vol">—</span> sats</div>
+    </div>
+    <!-- Ratio rebalanceo/enrutamiento -->
+    <div class="card tip" data-tip="fees_paid / fees_earned × 100.
+&lt;50% Excelente — nodo muy rentable.
+50–100% Aceptable — margen mejorable.
+&gt;100% Pérdida — rebalanceos demasiado caros.">
+      <div class="card-title">⚖️ Ratio Rebalan/Enrut.</div>
+      <div class="card-val" id="r-ratio">—</div>
+      <div class="card-sub">fees_paid / fees_earned</div>
+    </div>
+    <!-- Eficiencia de capital -->
+    <div class="card tip" data-tip="sats_enrutados / capacidad_total.
+Cuánto de tu capital está 'trabajando'.
+Mainnet: &gt;1% mensual es aceptable.
+Si es 0% en mainnet: revisar fees y conectividad.">
+      <div class="card-title">🎯 Efic. Capital</div>
+      <div class="card-val" id="r-efficiency">—</div>
+      <div class="card-sub">sats_enrutados / capacidad</div>
+    </div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div id="hud-bottom" class="hud-panel">
+    <!-- Mini chart fees 7 días -->
+    <div class="spark-wrap tip" data-tip="Barras diarias: verde=ganadas, amarillo=pagadas.
+Barras verdes más altas = nodo rentable ese día.
+Días vacíos = sin actividad de enrutamiento.">
+      <div class="spark-title">📊 Fees Ganadas vs Pagadas — 7 días</div>
+      <svg id="spark-daily" viewBox="0 0 300 55" preserveAspectRatio="none">
+        <text x="150" y="30" fill="rgba(136,136,170,.5)" text-anchor="middle" font-size="10" font-family="monospace">Sin datos</text>
+      </svg>
+    </div>
+    <!-- Mini chart forwards 24h -->
+    <div class="spark-wrap tip" data-tip="Pagos enrutados por hora en las últimas 24h.
+Picos = alta actividad de enrutamiento.
+Plano en 0 = sin tráfico (normal en testnet4).
+Tendencia creciente = ganando relevancia en la red.">
+      <div class="spark-title">⚡ Forwards por hora — 24h</div>
+      <svg id="spark-hourly" viewBox="0 0 300 55" preserveAspectRatio="none">
+        <text x="150" y="30" fill="rgba(136,136,170,.5)" text-anchor="middle" font-size="10" font-family="monospace">Sin datos</text>
+      </svg>
+    </div>
+    <!-- Net profit 7 días -->
+    <div class="bot-seg tip" data-tip="fees_earned - fees_paid en 7 días.
++ Verde = nodo rentable.
+- Rojo = gastas más en rebalanceos de lo que ganas.
+Objetivo: siempre positivo.">
+      <div class="bot-label">💰 Net Profit 7d</div>
+      <div class="bot-val" style="font-size:26px;" id="b-net-profit">—</div>
+      <div class="card-sub" id="b-net-sub">fees_earned - fees_paid</div>
+    </div>
+    <!-- Snapshot ts -->
+    <div class="bot-seg tip" data-tip="Timestamp del último registro en node_history.db.
+Debe ser reciente (min = intervalo configurado).
+Muy desactualizado = colector no está corriendo.">
+      <div class="bot-label">🕒 Último Snapshot</div>
+      <div class="bot-val" style="font-size:16px;" id="b-snap-ts">—</div>
+      <div class="card-sub">Datos en tiempo real</div>
+    </div>
+  </div>
+
+</div><!-- #cockpit -->
+
+<script>
+(function(){
+  const S = __STATS_JSON__;
+
+  // ── helpers ──
+  const $ = id => document.getElementById(id);
+  const fmtSat = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : String(n);
+  const fmtMsat = n => n >= 1e9 ? (n/1e9).toFixed(2)+'M sat' : n >= 1e6 ? (n/1e6).toFixed(1)+'k sat' : (n/1000).toFixed(0)+' sat';
+
+  // ── clock ──
+  function updateClock(){
+    $('t-clock').textContent = new Date().toLocaleTimeString('es',{hour12:false});
+  }
+  setInterval(updateClock, 1000); updateClock();
+
+  // ── populate from snapshot ──
+  const snap = S.snap || {};
+  if(snap.alias) $('t-alias').textContent = snap.alias;
+  if(snap.block_height) $('t-block').textContent = Number(snap.block_height).toLocaleString();
+  if(snap.num_peers !== undefined) $('t-peers').textContent = snap.num_peers;
+  if(snap.wallet_confirmed !== undefined)
+    $('t-wallet').textContent = fmtSat(snap.wallet_confirmed)+' sat';
+  $('t-uptime').textContent = S.uptime_pct_7d + '%';
+
+  // sync dot
+  const synced = snap.synced_to_chain === 1;
+  const dot = $('sync-dot');
+  dot.className = synced ? 'synced' : 'unsynced pulse';
+  $('sync-txt').textContent = synced ? 'OK' : 'NO';
+
+  // channels
+  const chA = snap.channels_active || 0;
+  const chT = snap.channels_total || 0;
+  $('l-ch-active').textContent = chA;
+  $('l-ch-total').textContent = chT;
+  const pct = chT > 0 ? (chA/chT*100) : 0;
+  $('l-ch-bar').style.width = pct + '%';
+
+  // gauge liquidez
+  const liq = snap.liquidity_ratio || 0;
+  $('gauge-pct').textContent = liq.toFixed(1) + '%';
+  const arc = document.getElementById('gauge-arc');
+  const offset = 157 - (liq/100)*157;
+  arc.setAttribute('stroke-dashoffset', offset);
+  const gc = liq > 70 || liq < 30 ? 'var(--amber)' : liq > 85 || liq < 15 ? 'var(--red)' : 'var(--green)';
+  arc.setAttribute('stroke', gc);
+
+  // capacity
+  $('l-capacity').textContent = fmtSat(snap.capacity_total || 0);
+
+  // zombies
+  const z = snap.zombie_channels || 0;
+  const zEl = $('l-zombies');
+  zEl.textContent = z;
+  zEl.className = 'card-val' + (z > 0 ? ' amber' : ' green');
+  $('l-zombie-cap').textContent = fmtSat(snap.inactive_capital_sat || 0) + ' sats inactivos';
+
+  // right panel
+  $('r-fees-earned').textContent = fmtMsat(snap.fwd_fees_cum_msat || 0);
+  $('r-fees-paid').textContent = fmtMsat(snap.payments_fees_cum_msat || 0);
+  $('r-fwd-count').textContent = (snap.fwd_count_cum || 0).toLocaleString();
+  $('r-fwd-vol').textContent = fmtSat(snap.fwd_amt_cum_sat || 0);
+
+  const earned = snap.fwd_fees_cum_msat || 1;
+  const paid   = snap.payments_fees_cum_msat || 0;
+  const ratio  = earned > 0 ? (paid/earned*100).toFixed(1) : '0.0';
+  const rEl = $('r-ratio');
+  rEl.textContent = ratio + '%';
+  rEl.className = 'card-val ' + (parseFloat(ratio) > 100 ? 'red' : parseFloat(ratio) > 50 ? 'amber' : 'green');
+
+  const eff = ((snap.capital_efficiency || 0) * 100).toFixed(3);
+  $('r-efficiency').textContent = eff + '%';
+
+  // bottom
+  const net7 = S.net_profit_7d_msat || 0;
+  const netEl = $('b-net-profit');
+  netEl.textContent = (net7 >= 0 ? '+' : '') + fmtMsat(net7);
+  netEl.className = 'bot-val ' + (net7 >= 0 ? 'pos' : 'neg');
+
+  if(snap.ts){
+    const d = new Date(snap.ts * 1000);
+    $('b-snap-ts').textContent = d.toLocaleString('es',{hour12:false});
+  }
+
+  // ── sparkline helpers ──
+  function makeSparkBars(svgId, data, keyEarned, keyPaid, colorE, colorP){
+    const svg = $(svgId);
+    if(!data || data.length === 0) return;
+    svg.innerHTML = '';
+    const W=300, H=55, PAD=4, n=data.length;
+    const bw = (W - PAD*(n+1)) / n;
+    const maxV = Math.max(...data.map(d=>(d[keyEarned]||0)+(d[keyPaid]||0)), 1);
+    data.forEach((d,i)=>{
+      const e = d[keyEarned]||0, p = d[keyPaid]||0;
+      const xb = PAD + i*(bw+PAD);
+      const he = (e/maxV)*(H-8);
+      const hp = (p/maxV)*(H-8);
+      // earned bar
+      if(he > 0){
+        const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        r.setAttribute('x',xb); r.setAttribute('y',H-8-he);
+        r.setAttribute('width',bw/2); r.setAttribute('height',he);
+        r.setAttribute('fill',colorE); r.setAttribute('rx','1');
+        svg.appendChild(r);
+      }
+      // paid bar
+      if(hp > 0){
+        const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        r.setAttribute('x',xb+bw/2); r.setAttribute('y',H-8-hp);
+        r.setAttribute('width',bw/2); r.setAttribute('height',hp);
+        r.setAttribute('fill',colorP); r.setAttribute('rx','1');
+        svg.appendChild(r);
+      }
+    });
+    // legend
+    const lg1 = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    lg1.setAttribute('x',2);lg1.setAttribute('y',1);lg1.setAttribute('width',6);lg1.setAttribute('height',4);lg1.setAttribute('fill',colorE);
+    const lg2 = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    lg2.setAttribute('x',38);lg2.setAttribute('y',1);lg2.setAttribute('width',6);lg2.setAttribute('height',4);lg2.setAttribute('fill',colorP);
+    const t1 = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t1.setAttribute('x',10);t1.setAttribute('y',6);t1.setAttribute('fill','rgba(136,136,170,.8)');t1.setAttribute('font-size','5');t1.textContent='Ganadas';
+    const t2 = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t2.setAttribute('x',46);t2.setAttribute('y',6);t2.setAttribute('fill','rgba(136,136,170,.8)');t2.setAttribute('font-size','5');t2.textContent='Pagadas';
+    svg.appendChild(lg1);svg.appendChild(t1);svg.appendChild(lg2);svg.appendChild(t2);
+  }
+
+  function makeSparkLine(svgId, data, key, color){
+    const svg = $(svgId);
+    if(!data || data.length === 0) return;
+    svg.innerHTML = '';
+    const W=300, H=55, PAD=6;
+    const vals = data.map(d=>d[key]||0);
+    const maxV = Math.max(...vals, 1);
+    const pts = vals.map((v,i)=>{
+      const x = PAD + (i/(vals.length-1||1))*(W-2*PAD);
+      const y = H-PAD - (v/maxV)*(H-2*PAD);
+      return `${x},${y}`;
+    });
+    const area = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    area.setAttribute('points', pts.join(' '));
+    area.setAttribute('fill','none');
+    area.setAttribute('stroke',color);
+    area.setAttribute('stroke-width','1.5');
+    area.setAttribute('stroke-linejoin','round');
+    svg.appendChild(area);
+    // dot at last point
+    const last = pts[pts.length-1].split(',');
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx',last[0]);dot.setAttribute('cy',last[1]);dot.setAttribute('r','3');
+    dot.setAttribute('fill',color);
+    svg.appendChild(dot);
+  }
+
+  makeSparkBars('spark-daily', S.daily, 'fees_earned_msat', 'fees_paid_msat', '#00ff88', '#ffcc00');
+  makeSparkLine('spark-hourly', S.hourly, 'fwd_count_delta', '#00dcff');
+
+  // ── AUTO-RELOAD: recarga la página cada 5 minutos para mostrar stats frescos ──
+  (function(){
+    var RELOAD_SECS = 300; // 5 minutos, sincronizado con el colector
+    var remaining = RELOAD_SECS;
+
+    // Crear indicador en el top bar
+    var indEl = document.createElement('div');
+    indEl.className = 'top-seg';
+    indEl.style.cssText = 'border-left:1px solid rgba(0,220,255,.2);min-width:72px;';
+    indEl.innerHTML = '<span class="lbl">REFRESCO</span><span class="val" id="reload-cd" style="font-size:13px;color:var(--sub);">5:00</span>';
+    document.getElementById('hud-top').appendChild(indEl);
+
+    var cdEl = document.getElementById('reload-cd');
+
+    setInterval(function(){
+      remaining--;
+      if(remaining <= 0){
+        location.reload();
+        return;
+      }
+      var m = Math.floor(remaining / 60);
+      var s = remaining % 60;
+      cdEl.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+      // Últimos 30s: cambiar color para advertir
+      if(remaining <= 30){
+        cdEl.style.color = 'var(--amber)';
+      }
+    }, 1000);
+  })();
+
+})();
+</script>
+
+<div id="hud-floatip"></div>
+<script>
+(function(){
+  const tip = document.getElementById('hud-floatip');
+  if(!tip) return;
+  document.querySelectorAll('[data-tip]').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      tip.textContent = el.getAttribute('data-tip');
+      tip.style.display = 'block';
+    });
+    el.addEventListener('mousemove', e => {
+      let x = e.clientX + 16, y = e.clientY - 12;
+      const tw = 270, th = tip.offsetHeight || 120;
+      if (x + tw > window.innerWidth)  x = e.clientX - tw - 10;
+      if (y + th > window.innerHeight) y = e.clientY - th - 10;
+      tip.style.left = x + 'px';
+      tip.style.top  = y + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      tip.style.display = 'none';
+    });
+  });
+})();
+</script>
+</body>
+</html>
+"""
+
+
+def generate_cockpit_html(csv_path: Path = None, cockpit_path: Path = None,
+                          my_pubkey: str = None, log_cb=print,
+                          skip_graph: bool = False) -> bool:
+    """
+    Genera el HTML cockpit: red 3D en iframe + paneles HUD con stats de node_history.db.
+
+    Parámetros:
+      skip_graph  -- Si True, omite regenerar el grafo 3D (solo actualiza stats).
+                     Útil para refrescos automáticos en background sin costo computacional.
+    """
+    if csv_path is None:
+        csv_path = CSV_FILE
+    if cockpit_path is None:
+        cockpit_path = EXPORTS_DIR / "lightning_cockpit.html"
+
+    graph_html_path = EXPORTS_DIR / "lightning_cockpit_graph.html"
+
+    # 1. Generar (o reutilizar) el grafo 3D
+    if skip_graph:
+        if not graph_html_path.exists():
+            log_cb("⚠️  No existe el grafo 3D previo; generando por primera vez...")
+            skip_graph = False  # forzar generación inicial
+        else:
+            log_cb("♻️  Reutilizando grafo 3D existente (solo actualizando stats)...")
+    if not skip_graph:
+        log_cb("🔧 Generando visualización 3D base...")
+        ok = generate_3d_html(csv_path, graph_html_path, my_pubkey, log_cb)
+        if not ok:
+            return False
+
+    # 2. Leer estadísticas históricas
+    if not skip_graph:
+        log_cb("📊 Leyendo node_history.db...")
+    stats = read_history_stats()
+
+    # 3. Serializar stats como JSON
+    stats_json = json.dumps(stats, ensure_ascii=False, default=str)
+
+    # 4. Construir el HTML cockpit
+    graph_rel = graph_html_path.name
+    html = COCKPIT_HTML.replace(
+        "GRAPH_SRC_PLACEHOLDER", graph_rel
+    ).replace(
+        "__STATS_JSON__", stats_json
+    )
+
+    cockpit_path.parent.mkdir(parents=True, exist_ok=True)
+    cockpit_path.write_text(html, encoding="utf-8")
+    if not skip_graph:
+        log_cb(f"✅ Cockpit guardado: {cockpit_path.name}")
+    return True
+
