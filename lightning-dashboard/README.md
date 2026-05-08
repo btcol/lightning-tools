@@ -1,5 +1,6 @@
 # ⚡ Lightning Dashboard
 
+![Lightning Dashboard Cockpit](images/ln-cockpit-Big.png)
 Un panel de control gráfico (GUI) unificado construido nativamente en Python/Tkinter para facilitar el manejo, exploración y rebalanceo circular de nodos en la Lightning Network. Es un Wrapper funcional creado para operar sin depender de manipulación constante en la terminal, las pruebas de operacion se realizaron con el nodo en la red testnet4, el ajuste para la red mainnet es directo, solo hay que modificar las variables de entorno según tu sistema operativo y lnd.
 
 ## Funcionamiento del Software

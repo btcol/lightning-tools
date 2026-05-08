@@ -1476,6 +1476,11 @@ Demasiado on-chain = capital sin trabajar.">
 
   <!-- LEFT PANEL: Canales & Liquidez -->
   <div id="hud-left" class="hud-panel">
+    <!-- Logo -->
+    <div style="text-align: center; margin-bottom: 5px;">
+      <img src="../images/ln-cockpit-Small.png" alt="LN Cockpit Logo" style="width: 130px; height: auto; border-radius: 8px; box-shadow: 0 0 15px rgba(0, 220, 255, 0.15);">
+    </div>
+    
     <!-- Canales activos/inactivos -->
     <div class="card tip" data-tip="Ideal: ≥80% de canales activos.
 Inactivos = peer desconectado.

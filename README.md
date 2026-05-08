@@ -1,5 +1,10 @@
 # lightning-tools
 
+![Lightning Dashboard](lightning-dashboard/images/ln-cockpit-Big.png)
+
+> [!IMPORTANT]
+> **🚀 NUEVA VERSIÓN GRÁFICA:** Te sugerimos encarecidamente dirigirte a la subcarpeta [`lightning-dashboard`](./lightning-dashboard/). Allí encontrarás una interfaz gráfica (GUI) unificada que contiene elementos nuevos y procesos mucho más automatizados (gestión de billetera on-chain, apertura inteligente de canales, rebalanceo circular predictivo y métricas en tiempo real) que reemplazan el uso de los scripts individuales de este directorio.
+
 Multiples herramientas para administrar de forma mas amigable los nodos en Lightning Network, basado en comandos LNCLI y Python.
 
 ## Entorno de Nodos Lightning (Testnet4)
@@ -28,8 +33,6 @@ pip install -r requirements.txt
 Además requiere de `bitcoin-cli`, `lnd`, `lncli`, y utilería como `jq` instalados a nivel sistema u operativos localmente como `lncli-debug`.
 
 ---
-
-**Nota:** Puedes encontrar una interfaz gráfica unificada que concentra todo el funcionamiento general de la terminal y del rebalanceo automatizado en la subcarpeta `lightning-dashboard`.
 
 ## Créditos y Derechos de Uso
 
