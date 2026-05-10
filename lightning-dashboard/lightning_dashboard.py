@@ -147,15 +147,13 @@ class LightningDashboard(tk.Tk):
         self.tab_wallet  = ttk.Frame(self.notebook)
         self.tab_peers   = ttk.Frame(self.notebook)
         self.tab_suggest = ttk.Frame(self.notebook)
-        self.tab_execute = ttk.Frame(self.notebook)
         self.tab_open    = ttk.Frame(self.notebook)
         self.tab_close   = ttk.Frame(self.notebook)
 
         self.notebook.add(self.tab_main,    text="Red & Cockpit HUD")
         self.notebook.add(self.tab_wallet,  text="Wallet On-chain")
         self.notebook.add(self.tab_peers,   text="Peers")
-        self.notebook.add(self.tab_suggest, text="Sugerencias Rebalanceo")
-        self.notebook.add(self.tab_execute, text="Ejecutar Rebalanceo")
+        self.notebook.add(self.tab_suggest, text="Rebalanceo")
         self.notebook.add(self.tab_open,    text="Apertura Canales")
         self.notebook.add(self.tab_close,   text="Cierre Canales")
 
@@ -164,7 +162,6 @@ class LightningDashboard(tk.Tk):
         self._build_tab_wallet()
         self._build_tab_peers()
         self._build_tab_suggest()
-        self._build_tab_execute()
         self._build_tab_open()
         self._build_tab_close()
 
@@ -176,6 +173,9 @@ class LightningDashboard(tk.Tk):
         # Arrancar colector autónomo de estadísticas históricas
         self._stats_interval_secs = 300  # cada 5 minutos por defecto
         self._start_auto_stats_loop()
+
+        # Arrancar el hilo del piloto automático experimental
+        threading.Thread(target=self._auto_rebalance_loop, daemon=True).start()
 
     def _detect_node(self):
         info = core.get_node_info()
@@ -777,7 +777,7 @@ class LightningDashboard(tk.Tk):
         ttk.Button(top, text="Calcular Sugerencias", command=self._action_calc_suggestions).pack(side=tk.RIGHT)
 
         cols = ("monto", "from_scid", "to_scid", "from_peer", "to_peer")
-        self.tree_sug = ttk.Treeview(self.tab_suggest, columns=cols, show="headings", height=20)
+        self.tree_sug = ttk.Treeview(self.tab_suggest, columns=cols, show="headings", height=8)
         self.tree_sug.heading("monto", text="MONTO (SATS)")
         self.tree_sug.heading("from_scid", text="FROM SCID")
         self.tree_sug.heading("to_scid", text="TO SCID")
@@ -788,12 +788,77 @@ class LightningDashboard(tk.Tk):
         self.tree_sug.column("from_scid", width=150, anchor=tk.CENTER)
         self.tree_sug.column("to_scid", width=150, anchor=tk.CENTER)
         
-        self.tree_sug.pack(fill=tk.BOTH, expand=True, pady=5)
+        self.tree_sug.pack(fill=tk.X, pady=5)
         
         self.current_suggestions = []
         self.tree_sug.bind("<Double-1>", self._on_suggestion_double_click)
         
-        ttk.Label(self.tab_suggest, text="* Doble clic en una fila para enviarla al Panel de Ejecución.", foreground=core.CLR_SUBTEXT).pack(anchor=tk.W)
+        ttk.Label(self.tab_suggest, text="* Doble clic en una fila para rellenar el formulario inferior.", foreground=core.CLR_SUBTEXT).pack(anchor=tk.W)
+
+        ttk.Separator(self.tab_suggest, orient='horizontal').pack(fill=tk.X, pady=10)
+
+        # ── FORMULARIO EJECUTAR REBALANCEO ──
+        ttk.Label(self.tab_suggest, text="Control Manual de Rebalanceo", style="Header.TLabel").pack(pady=(0, 0), anchor=tk.W)
+
+        frame_inputs = ttk.Frame(self.tab_suggest)
+        frame_inputs.pack(fill=tk.X, pady=5)
+
+        # Variables
+        self.var_from = tk.StringVar()
+        self.var_to_scid = tk.StringVar()
+        self.var_to_pub = tk.StringVar()
+        self.var_amt = tk.StringVar(value=str(core.DEFAULT_AMT_SATS))
+        self.var_fee = tk.StringVar(value=str(core.DEFAULT_MAX_FEE_SATS))
+        self.var_ppm = tk.StringVar(value=str(core.DEFAULT_MAX_FEE_PPM))
+
+        # Cuadrícula
+        ttk.Label(frame_inputs, text="FROM SCID:").grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
+        ttk.Entry(frame_inputs, textvariable=self.var_from, width=20).grid(row=0, column=1, sticky=tk.W)
+        
+        ttk.Label(frame_inputs, text="TO SCID (ref):").grid(row=0, column=2, sticky=tk.E, padx=5, pady=5)
+        ttk.Entry(frame_inputs, textvariable=self.var_to_scid, width=20).grid(row=0, column=3, sticky=tk.W)
+
+        ttk.Label(frame_inputs, text="TO PUBKEY:").grid(row=1, column=0, sticky=tk.E, padx=5, pady=5)
+        ttk.Entry(frame_inputs, textvariable=self.var_to_pub, width=45).grid(row=1, column=1, columnspan=3, sticky=tk.W)
+
+        ttk.Label(frame_inputs, text="Monto (sats):").grid(row=2, column=0, sticky=tk.E, padx=5, pady=5)
+        ttk.Entry(frame_inputs, textvariable=self.var_amt, width=20).grid(row=2, column=1, sticky=tk.W)
+        
+        ttk.Label(frame_inputs, text="Max Fee (sats):").grid(row=2, column=2, sticky=tk.E, padx=5, pady=5)
+        ttk.Entry(frame_inputs, textvariable=self.var_fee, width=20).grid(row=2, column=3, sticky=tk.W)
+
+        btn_row = ttk.Frame(self.tab_suggest)
+        btn_row.pack(fill=tk.X, pady=5)
+        
+        ttk.Button(btn_row, text="1. Analizar Rentabilidad", command=self._action_simulate_fee).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_row, text="2. EJECUTAR REBALANCEO", command=self._action_execute_reb).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_row, text="Limpiar Log", command=lambda: self.log_exec.delete("1.0", tk.END)).pack(side=tk.RIGHT, padx=5)
+
+        # ── PILOTO AUTOMÁTICO (EXPERIMENTAL) ──
+        ttk.Separator(self.tab_suggest, orient='horizontal').pack(fill=tk.X, pady=5)
+        
+        frame_auto = ttk.Frame(self.tab_suggest)
+        frame_auto.pack(fill=tk.X, pady=2)
+
+        self.var_auto_reb = tk.BooleanVar(value=False)
+        self.var_auto_interval = tk.StringVar(value="5")
+
+        ttk.Label(frame_auto, text="🤖 Piloto Automático Experimental:", style="Header.TLabel").pack(side=tk.LEFT, padx=(0, 10))
+
+        chk = ttk.Checkbutton(frame_auto, text="Activar (Fondo)", 
+                              variable=self.var_auto_reb, command=self._on_auto_reb_toggle)
+        chk.pack(side=tk.LEFT, padx=5)
+
+        ttk.Label(frame_auto, text="Intervalo (min):").pack(side=tk.LEFT, padx=(10, 5))
+        ttk.Entry(frame_auto, textvariable=self.var_auto_interval, width=4).pack(side=tk.LEFT)
+
+        self.lbl_auto_status = ttk.Label(frame_auto, text="Estado: INACTIVO", foreground=core.CLR_SUBTEXT)
+        self.lbl_auto_status.pack(side=tk.RIGHT, padx=5)
+        
+        ttk.Separator(self.tab_suggest, orient='horizontal').pack(fill=tk.X, pady=(5, 10))
+
+        self.log_exec = scrolledtext.ScrolledText(self.tab_suggest, height=10, bg=core.CLR_BG, fg=core.CLR_TEXT, font=(core._FONT_MONO, 11))
+        self.log_exec.pack(fill=tk.BOTH, expand=True, pady=5)
 
     def _action_calc_suggestions(self):
         for row in self.tree_sug.get_children():
@@ -829,52 +894,6 @@ class LightningDashboard(tk.Tk):
         self.var_to_scid.set(sug["to_scid"])
         self.var_to_pub.set(sug["to_pub"])
         self.var_amt.set(str(sug["amount"]))
-        
-        # Saltar al panel D
-        self.notebook.select(self.tab_execute)
-
-    # =========================================================================
-    # PANEL D: EJECUTAR REBALANCEO
-    # =========================================================================
-    def _build_tab_execute(self):
-        ttk.Label(self.tab_execute, text="Control Manual de Rebalanceo", style="Header.TLabel").pack(pady=(10, 0), anchor=tk.W)
-
-        frame_inputs = ttk.Frame(self.tab_execute)
-        frame_inputs.pack(fill=tk.X, pady=10)
-
-        # Variables
-        self.var_from = tk.StringVar()
-        self.var_to_scid = tk.StringVar()
-        self.var_to_pub = tk.StringVar()
-        self.var_amt = tk.StringVar(value=str(core.DEFAULT_AMT_SATS))
-        self.var_fee = tk.StringVar(value=str(core.DEFAULT_MAX_FEE_SATS))
-        self.var_ppm = tk.StringVar(value=str(core.DEFAULT_MAX_FEE_PPM))
-
-        # Cuadrícula
-        ttk.Label(frame_inputs, text="FROM SCID:").grid(row=0, column=0, sticky=tk.E, padx=5, pady=5)
-        ttk.Entry(frame_inputs, textvariable=self.var_from, width=20).grid(row=0, column=1, sticky=tk.W)
-        
-        ttk.Label(frame_inputs, text="TO SCID (ref):").grid(row=0, column=2, sticky=tk.E, padx=5, pady=5)
-        ttk.Entry(frame_inputs, textvariable=self.var_to_scid, width=20).grid(row=0, column=3, sticky=tk.W)
-
-        ttk.Label(frame_inputs, text="TO PUBKEY:").grid(row=1, column=0, sticky=tk.E, padx=5, pady=5)
-        ttk.Entry(frame_inputs, textvariable=self.var_to_pub, width=45).grid(row=1, column=1, columnspan=3, sticky=tk.W)
-
-        ttk.Label(frame_inputs, text="Monto (sats):").grid(row=2, column=0, sticky=tk.E, padx=5, pady=5)
-        ttk.Entry(frame_inputs, textvariable=self.var_amt, width=20).grid(row=2, column=1, sticky=tk.W)
-        
-        ttk.Label(frame_inputs, text="Max Fee (sats):").grid(row=2, column=2, sticky=tk.E, padx=5, pady=5)
-        ttk.Entry(frame_inputs, textvariable=self.var_fee, width=20).grid(row=2, column=3, sticky=tk.W)
-
-        btn_row = ttk.Frame(self.tab_execute)
-        btn_row.pack(fill=tk.X, pady=5)
-        
-        ttk.Button(btn_row, text="1. Analizar Rentabilidad", command=self._action_simulate_fee).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_row, text="2. EJECUTAR REBALANCEO", command=self._action_execute_reb).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_row, text="Limpiar Log", command=lambda: self.log_exec.delete("1.0", tk.END)).pack(side=tk.RIGHT, padx=5)
-
-        self.log_exec = scrolledtext.ScrolledText(self.tab_execute, height=20, bg=core.CLR_BG, fg=core.CLR_TEXT, font=(core._FONT_MONO, 11))
-        self.log_exec.pack(fill=tk.BOTH, expand=True, pady=5)
 
     def _action_simulate_fee(self):
         try:
@@ -934,6 +953,91 @@ class LightningDashboard(tk.Tk):
                 logger("\n[] La operación falló. Ajusta fee o busca otra ruta.")
                 
         threading.Thread(target=run_reb, daemon=True).start()
+
+    def _on_auto_reb_toggle(self):
+        if self.var_auto_reb.get():
+            self.var_amt.set("1000")
+            self.var_fee.set("1")
+            self.lbl_auto_status.config(text="Estado: ACTIVO", foreground=core.CLR_GREEN)
+            self.log_exec.insert(tk.END, f"\n[{datetime.now().strftime('%H:%M:%S')}] [AUTO-PILOTO] Activado. Monto y fee ajustados a 1000 y 1.\n")
+            self.log_exec.see(tk.END)
+        else:
+            self.lbl_auto_status.config(text="Estado: INACTIVO", foreground=core.CLR_SUBTEXT)
+            self.log_exec.insert(tk.END, f"\n[{datetime.now().strftime('%H:%M:%S')}] [AUTO-PILOTO] Desactivado.\n")
+            self.log_exec.see(tk.END)
+
+    def _auto_rebalance_loop(self):
+        import time
+        import random
+        while True:
+            time.sleep(10) # Evalúa cada 10 segundos
+            if not getattr(self, 'var_auto_reb', None) or not self.var_auto_reb.get():
+                continue
+                
+            try:
+                interval_mins = int(self.var_auto_interval.get())
+                if interval_mins <= 0: interval_mins = 1
+            except ValueError:
+                interval_mins = 5
+                
+            now = time.time()
+            if not hasattr(self, 'last_auto_reb_time'):
+                self.last_auto_reb_time = now - (interval_mins * 60) + 10 # Forzar ejecución pronta el primer ciclo
+                
+            if now - self.last_auto_reb_time < interval_mins * 60:
+                continue
+                
+            self.last_auto_reb_time = now
+            
+            def logger(msg):
+                self.log_exec.insert(tk.END, msg + "\n")
+                self.log_exec.see(tk.END)
+                
+            logger(f"\n[{datetime.now().strftime('%H:%M:%S')}] [AUTO-PILOTO] Iniciando ciclo de tráfico artificial...")
+            
+            channels = core.get_channels()
+            if not channels:
+                logger("   [!] No hay canales disponibles.")
+                continue
+                
+            sugs = core.suggest_rebalances(channels)
+            if not sugs:
+                logger("   [!] No se encontraron rutas de rebalanceo viables.")
+                continue
+                
+            top_sugs = sugs[:10]
+            chosen = random.choice(top_sugs)
+            
+            try:
+                amt = int(self.var_amt.get())
+                fee = int(self.var_fee.get())
+            except ValueError:
+                amt, fee = 1000, 1
+                
+            fscid = chosen["from_scid"]
+            tpub  = chosen["to_pub"]
+            
+            logger(f"   Selección Aleatoria: FROM {fscid} -> TO {tpub[:15]}...")
+            
+            max_retries = 15
+            current_fee = fee
+            
+            for attempt in range(max_retries):
+                logger(f"   [Intento {attempt+1}/{max_retries}] Moviendo {amt:,} sats (max fee: {current_fee:,} sats)")
+                success = core.execute_rebalance(fscid, tpub, amt, current_fee, logger)
+                
+                if success:
+                    logger(f"   [AUTO-PILOTO] ✅ Rebalanceo exitoso con fee de {current_fee} sats.")
+                    # Actualizar la interfaz para que el próximo ciclo arranque desde este fee
+                    self.var_fee.set(str(current_fee))
+                    break
+                else:
+                    logger(f"   [AUTO-PILOTO] ❌ Falló con fee de {current_fee} sats.")
+                    if attempt < max_retries - 1:
+                        current_fee += 1
+                        logger(f"   [AUTO-PILOTO] Incrementando fee a {current_fee} sats y reintentando...")
+                    else:
+                        logger(f"   [AUTO-PILOTO] ⚠️ Se alcanzó el límite de {max_retries} intentos. Se aborta esta pareja hasta el próximo ciclo.")
 
     # =========================================================================
     # PANEL E: APERTURA DE CANALES

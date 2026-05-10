@@ -778,6 +778,7 @@ def read_history_stats(db_path: Path = None) -> dict:
         "snap": {}, "hourly": [], "daily": [],
         "net_profit_7d_msat": 0,
         "uptime_pct_7d": 0.0,
+        "zombies_list": [],
     }
     if not db_path.exists():
         return empty
@@ -791,6 +792,14 @@ def read_history_stats(db_path: Path = None) -> dict:
             "SELECT * FROM snapshots ORDER BY ts DESC LIMIT 1"
         ).fetchone()
         snap = dict(row) if row else {}
+
+        zombies_list = []
+        if snap and "id" in snap:
+            z_rows = conn.execute(
+                "SELECT peer_alias, chan_id, capacity FROM channel_snapshots WHERE snapshot_id = ? AND is_zombie = 1",
+                (snap["id"],)
+            ).fetchall()
+            zombies_list = [dict(r) for r in z_rows]
 
         # Hourly últimas 24h
         cutoff_h = (int(datetime.now(timezone.utc).timestamp()) // 3600 - 24) * 3600
@@ -830,6 +839,7 @@ def read_history_stats(db_path: Path = None) -> dict:
             "daily": daily,
             "net_profit_7d_msat": net_7d,
             "uptime_pct_7d": uptime_pct,
+            "zombies_list": zombies_list,
         }
     except Exception as e:
         print(f"[WARN] read_history_stats: {e}", file=sys.stderr)
@@ -870,7 +880,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
 
     log_cb(f"  Edges en CSV: {len(df)}")
     NOW = datetime.now(timezone.utc).timestamp()
-    MAX_NODES, EDGE_SAMPLE = 300, 3000
+    MAX_NODES, EDGE_SAMPLE = 500, 5000
 
     G = nx.Graph()
     for _, r in df.iterrows():
@@ -927,7 +937,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
         G = G.subgraph(top_pks).copy()
 
     log_cb("  Calculando layout 3D...")
-    pos3d = nx.spring_layout(G, dim=3, seed=42, k=0.5)
+    pos3d = nx.spring_layout(G, dim=3, seed=42, k=0.7)
 
     node_pks = list(G.nodes())
     node_x = [pos3d[n][0] for n in node_pks]
@@ -1500,10 +1510,10 @@ Equilibrio = más enrutamiento posible.">
       <div class="card-title">💧 Liquidez Local</div>
       <div class="gauge-wrap">
         <svg width="110" height="70" viewBox="0 0 110 70">
-          <path d="M10,65 A50,50 0 0,1 100,65" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10" stroke-linecap="round"/>
-          <path id="gauge-arc" d="M10,65 A50,50 0 0,1 100,65" fill="none" stroke="var(--green)" stroke-width="10" stroke-linecap="round"
+          <path d="M5,60 A50,50 0 0,1 105,60" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10" stroke-linecap="round"/>
+          <path id="gauge-arc" d="M5,60 A50,50 0 0,1 105,60" fill="none" stroke="var(--green)" stroke-width="10" stroke-linecap="round"
             stroke-dasharray="157" stroke-dashoffset="157"/>
-          <text x="55" y="62" text-anchor="middle" fill="var(--cyan)" font-family="Orbitron,sans-serif" font-size="18" id="gauge-pct">—%</text>
+          <text x="55" y="55" text-anchor="middle" fill="var(--cyan)" font-family="Orbitron,sans-serif" font-size="18" id="gauge-pct">—%</text>
         </svg>
       </div>
       <div class="card-sub" style="text-align:center">Local / (Local+Remote)</div>
@@ -1518,7 +1528,7 @@ Capital en on-chain = capital sin trabajar.">
       <div class="card-sub">sats en canales</div>
     </div>
     <!-- Zombies -->
-    <div class="card tip" data-tip="Ideal: 0.
+    <div class="card tip" id="card-zombies" data-tip="Ideal: 0.
 Canal activo sin actualizaciones en &gt;7 días.
 Capital inmovilizado e improductivo.
 Considera cerrar zombies persistentes.">
@@ -1645,10 +1655,25 @@ Muy desactualizado = colector no está corriendo.">
   const snap = S.snap || {};
   if(snap.alias) $('t-alias').textContent = snap.alias;
   if(snap.block_height) $('t-block').textContent = Number(snap.block_height).toLocaleString();
-  if(snap.num_peers !== undefined) $('t-peers').textContent = snap.num_peers;
+  
+  if(snap.num_peers !== undefined) {
+    const p = snap.num_peers;
+    const pEl = $('t-peers');
+    pEl.textContent = p;
+    if (p >= 3) { pEl.style.color = 'var(--green)'; pEl.style.textShadow = '0 0 8px var(--green)'; }
+    else if (p === 2) { pEl.style.color = 'var(--amber)'; pEl.style.textShadow = '0 0 8px var(--amber)'; }
+    else { pEl.style.color = 'var(--red)'; pEl.style.textShadow = '0 0 8px var(--red)'; }
+  }
+
   if(snap.wallet_confirmed !== undefined)
     $('t-wallet').textContent = fmtSat(snap.wallet_confirmed)+' sat';
-  $('t-uptime').textContent = S.uptime_pct_7d + '%';
+
+  const up = S.uptime_pct_7d || 0;
+  const upEl = $('t-uptime');
+  upEl.textContent = up + '%';
+  if (up >= 95) { upEl.style.color = 'var(--green)'; upEl.style.textShadow = '0 0 8px var(--green)'; }
+  else if (up >= 80) { upEl.style.color = 'var(--amber)'; upEl.style.textShadow = '0 0 8px var(--amber)'; }
+  else { upEl.style.color = 'var(--red)'; upEl.style.textShadow = '0 0 8px var(--red)'; }
 
   // sync dot
   const synced = snap.synced_to_chain === 1;
@@ -1659,19 +1684,30 @@ Muy desactualizado = colector no está corriendo.">
   // channels
   const chA = snap.channels_active || 0;
   const chT = snap.channels_total || 0;
-  $('l-ch-active').textContent = chA;
+  const chEl = $('l-ch-active');
+  chEl.textContent = chA;
   $('l-ch-total').textContent = chT;
   const pct = chT > 0 ? (chA/chT*100) : 0;
+  
+  let cColor = 'var(--green)';
+  if (pct < 40) cColor = 'var(--red)';
+  else if (pct < 80) cColor = 'var(--amber)';
+  
   $('l-ch-bar').style.width = pct + '%';
+  $('l-ch-bar').style.background = cColor;
+  chEl.style.color = cColor;
+  chEl.style.textShadow = `0 0 10px ${cColor}`;
 
   // gauge liquidez
   const liq = snap.liquidity_ratio || 0;
-  $('gauge-pct').textContent = liq.toFixed(1) + '%';
+  const liqEl = $('gauge-pct');
+  liqEl.textContent = liq.toFixed(1) + '%';
   const arc = document.getElementById('gauge-arc');
   const offset = 157 - (liq/100)*157;
   arc.setAttribute('stroke-dashoffset', offset);
-  const gc = liq > 70 || liq < 30 ? 'var(--amber)' : liq > 85 || liq < 15 ? 'var(--red)' : 'var(--green)';
+  const gc = (liq > 85 || liq < 15) ? 'var(--red)' : (liq > 70 || liq < 30) ? 'var(--amber)' : 'var(--green)';
   arc.setAttribute('stroke', gc);
+  liqEl.setAttribute('fill', gc);
 
   // capacity
   $('l-capacity').textContent = fmtSat(snap.capacity_total || 0);
@@ -1680,8 +1716,19 @@ Muy desactualizado = colector no está corriendo.">
   const z = snap.zombie_channels || 0;
   const zEl = $('l-zombies');
   zEl.textContent = z;
-  zEl.className = 'card-val' + (z > 0 ? ' amber' : ' green');
+  zEl.className = 'card-val ' + (z > 0 ? 'red' : 'green');
   $('l-zombie-cap').textContent = fmtSat(snap.inactive_capital_sat || 0) + ' sats inactivos';
+
+  if (S.zombies_list && S.zombies_list.length > 0) {
+    let zTip = "🧟 ZOMBIES DETECTADOS:\\n";
+    S.zombies_list.forEach(zb => {
+      const alias = zb.peer_alias || 'Desconocido';
+      zTip += `- ${alias} (${fmtSat(zb.capacity)} sats)\\n`;
+    });
+    zTip += "\\nConsidera cerrar estos canales.";
+    const cardZ = $('card-zombies');
+    if (cardZ) cardZ.setAttribute('data-tip', zTip);
+  }
 
   // right panel
   $('r-fees-earned').textContent = fmtMsat(snap.fwd_fees_cum_msat || 0);

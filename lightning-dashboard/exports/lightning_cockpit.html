@@ -198,10 +198,10 @@ Equilibrio = más enrutamiento posible.">
       <div class="card-title">💧 Liquidez Local</div>
       <div class="gauge-wrap">
         <svg width="110" height="70" viewBox="0 0 110 70">
-          <path d="M10,65 A50,50 0 0,1 100,65" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10" stroke-linecap="round"/>
-          <path id="gauge-arc" d="M10,65 A50,50 0 0,1 100,65" fill="none" stroke="var(--green)" stroke-width="10" stroke-linecap="round"
+          <path d="M5,60 A50,50 0 0,1 105,60" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10" stroke-linecap="round"/>
+          <path id="gauge-arc" d="M5,60 A50,50 0 0,1 105,60" fill="none" stroke="var(--green)" stroke-width="10" stroke-linecap="round"
             stroke-dasharray="157" stroke-dashoffset="157"/>
-          <text x="55" y="62" text-anchor="middle" fill="var(--cyan)" font-family="Orbitron,sans-serif" font-size="18" id="gauge-pct">—%</text>
+          <text x="55" y="55" text-anchor="middle" fill="var(--cyan)" font-family="Orbitron,sans-serif" font-size="18" id="gauge-pct">—%</text>
         </svg>
       </div>
       <div class="card-sub" style="text-align:center">Local / (Local+Remote)</div>
@@ -216,7 +216,7 @@ Capital en on-chain = capital sin trabajar.">
       <div class="card-sub">sats en canales</div>
     </div>
     <!-- Zombies -->
-    <div class="card tip" data-tip="Ideal: 0.
+    <div class="card tip" id="card-zombies" data-tip="Ideal: 0.
 Canal activo sin actualizaciones en &gt;7 días.
 Capital inmovilizado e improductivo.
 Considera cerrar zombies persistentes.">
@@ -326,7 +326,7 @@ Muy desactualizado = colector no está corriendo.">
 
 <script>
 (function(){
-  const S = {"snap": {"id": 1078, "ts": 1778258495, "block_height": 134242, "alias": "NodoBtcolLnd-testnet4", "pubkey": "0391a0f5677df1cfab216c04ae2d1a56812c0b5e750647390f2330a18c9d11a756", "synced_to_chain": 1, "synced_to_graph": 1, "num_peers": 5, "channels_active": 4, "channels_inactive": 0, "channels_pending_open": 0, "channels_pending_close": 5, "channels_total": 9, "capacity_total": 5500000, "balance_local": 3342371, "balance_remote": 2151324, "wallet_confirmed": 1676213, "wallet_unconfirmed": 33805, "liquidity_ratio": 60.84, "capital_concentration": 36.36, "fwd_count_cum": 4, "fwd_amt_cum_sat": 316002, "fwd_fees_cum_msat": 105116, "fwd_avg_size_sat": 79000, "payments_count_cum": 8, "payments_fees_cum_msat": 190040, "zombie_channels": 0, "inactive_capital_sat": 0, "capital_efficiency": 0.0}, "hourly": [{"hour_ts": 1778169600, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778173200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778176800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778180400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778184000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778187600, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778191200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778194800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778198400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778202000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778205600, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 36}, {"hour_ts": 1778209200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778212800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778216400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778220000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778223600, "fwd_count_delta": 1, "fwd_amt_delta_sat": 100001, "fees_earned_msat": 1100, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778227200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778230800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778234400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778238000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778241600, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778245200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778248800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778252400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.7, "active_channels": 9, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778256000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 60.74, "active_channels": 4, "zombie_channels": 0, "sample_count": 21}], "daily": [{"date": "2026-05-06", "fwd_count_delta": 3, "fwd_amt_delta_sat": 216001, "fees_earned_msat": 104016, "fees_paid_msat": 62014, "net_profit_msat": 42002, "avg_liquidity_ratio": 56.96, "avg_active_channels": 8.72, "avg_capacity_sat": 5350000, "disconnections": 0, "zombie_channels": 0, "inactive_capital_sat": 0, "capital_efficiency": 0.040374, "sample_count": 56}, {"date": "2026-05-07", "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 128026, "net_profit_msat": -128026, "avg_liquidity_ratio": 58.19, "avg_active_channels": 8.0, "avg_capacity_sat": 5500409, "disconnections": 0, "zombie_channels": 0, "inactive_capital_sat": 0, "capital_efficiency": 0.0, "sample_count": 605}, {"date": "2026-05-08", "fwd_count_delta": 1, "fwd_amt_delta_sat": 100001, "fees_earned_msat": 1100, "fees_paid_msat": 0, "net_profit_msat": 1100, "avg_liquidity_ratio": 60.7, "avg_active_channels": 8.92, "avg_capacity_sat": 5766592, "disconnections": 0, "zombie_channels": 0, "inactive_capital_sat": 0, "capital_efficiency": 0.017341, "sample_count": 417}], "net_profit_7d_msat": -84924, "uptime_pct_7d": 100.0};
+  const S = {"snap": {"id": 2332, "ts": 1778443832, "block_height": 134548, "alias": "NodoBtcolLnd-testnet4", "pubkey": "0391a0f5677df1cfab216c04ae2d1a56812c0b5e750647390f2330a18c9d11a756", "synced_to_chain": 1, "synced_to_graph": 1, "num_peers": 9, "channels_active": 6, "channels_inactive": 0, "channels_pending_open": 0, "channels_pending_close": 0, "channels_total": 6, "capacity_total": 7500000, "balance_local": 5327486, "balance_remote": 2151688, "wallet_confirmed": 1599945, "wallet_unconfirmed": 0, "liquidity_ratio": 71.23, "capital_concentration": 26.67, "fwd_count_cum": 4, "fwd_amt_cum_sat": 316002, "fwd_fees_cum_msat": 105116, "fwd_avg_size_sat": 79000, "payments_count_cum": 11, "payments_fees_cum_msat": 554849, "zombie_channels": 2, "inactive_capital_sat": 3000000, "capital_efficiency": 0.0}, "hourly": [{"hour_ts": 1778356800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 66.81, "active_channels": 5, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778360400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 66.81, "active_channels": 5, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778364000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 66.81, "active_channels": 5, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778367600, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 66.81, "active_channels": 5, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778371200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 67.18, "active_channels": 6, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778374800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.24, "active_channels": 6, "zombie_channels": 0, "sample_count": 24}, {"hour_ts": 1778378400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.24, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778382000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.24, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778385600, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.24, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778389200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.24, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778392800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.24, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778396400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.24, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778400000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.24, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778403600, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.24, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778407200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.23, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778410800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.23, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778414400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.23, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778418000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.23, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778421600, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 357301, "avg_liquidity_ratio": 71.23, "active_channels": 6, "zombie_channels": 2, "sample_count": 30}, {"hour_ts": 1778425200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.23, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778428800, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.23, "active_channels": 6, "zombie_channels": 2, "sample_count": 26}, {"hour_ts": 1778432400, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.23, "active_channels": 5, "zombie_channels": 1, "sample_count": 24}, {"hour_ts": 1778436000, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.23, "active_channels": 5, "zombie_channels": 1, "sample_count": 24}, {"hour_ts": 1778439600, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "avg_liquidity_ratio": 71.23, "active_channels": 6, "zombie_channels": 2, "sample_count": 24}, {"hour_ts": 1778443200, "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 7508, "avg_liquidity_ratio": 71.23, "active_channels": 6, "zombie_channels": 2, "sample_count": 7}], "daily": [{"date": "2026-05-06", "fwd_count_delta": 3, "fwd_amt_delta_sat": 216001, "fees_earned_msat": 104016, "fees_paid_msat": 62014, "net_profit_msat": 42002, "avg_liquidity_ratio": 56.96, "avg_active_channels": 8.72, "avg_capacity_sat": 5350000, "disconnections": 0, "zombie_channels": 0, "inactive_capital_sat": 0, "capital_efficiency": 0.040374, "sample_count": 56}, {"date": "2026-05-07", "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 128026, "net_profit_msat": -128026, "avg_liquidity_ratio": 58.19, "avg_active_channels": 8.0, "avg_capacity_sat": 5500409, "disconnections": 0, "zombie_channels": 0, "inactive_capital_sat": 0, "capital_efficiency": 0.0, "sample_count": 605}, {"date": "2026-05-08", "fwd_count_delta": 1, "fwd_amt_delta_sat": 100001, "fees_earned_msat": 1100, "fees_paid_msat": 0, "net_profit_msat": 1100, "avg_liquidity_ratio": 61.82, "avg_active_channels": 7.7, "avg_capacity_sat": 5873117, "disconnections": 0, "zombie_channels": 0, "inactive_capital_sat": 0, "capital_efficiency": 0.017027, "sample_count": 598}, {"date": "2026-05-09", "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 0, "net_profit_msat": 0, "avg_liquidity_ratio": 66.81, "avg_active_channels": 5.0, "avg_capacity_sat": 6500000, "disconnections": 0, "zombie_channels": 0, "inactive_capital_sat": 0, "capital_efficiency": 0.0, "sample_count": 578}, {"date": "2026-05-10", "fwd_count_delta": 0, "fwd_amt_delta_sat": 0, "fees_earned_msat": 0, "fees_paid_msat": 364809, "net_profit_msat": -364809, "avg_liquidity_ratio": 70.57, "avg_active_channels": 5.68, "avg_capacity_sat": 7455435, "disconnections": 0, "zombie_channels": 2, "inactive_capital_sat": 3000000, "capital_efficiency": 0.0, "sample_count": 495}], "net_profit_7d_msat": -449733, "uptime_pct_7d": 100.0, "zombies_list": [{"peer_alias": "lnd.testnet4.lnmarkets.com", "chan_id": "14351c6a9f0faff9c53ea3462075cf7c0eee04d2a795e58e9f49cfc7eef3aaa0", "capacity": 1000000}, {"peer_alias": "2FakTorLNtest4🧪🧬", "chan_id": "c80adb6664f75c82101485293698b7d3afd57c78f3d00aa5b76f8d0a22455623", "capacity": 2000000}]};
 
   // ── helpers ──
   const $ = id => document.getElementById(id);
@@ -343,10 +343,25 @@ Muy desactualizado = colector no está corriendo.">
   const snap = S.snap || {};
   if(snap.alias) $('t-alias').textContent = snap.alias;
   if(snap.block_height) $('t-block').textContent = Number(snap.block_height).toLocaleString();
-  if(snap.num_peers !== undefined) $('t-peers').textContent = snap.num_peers;
+  
+  if(snap.num_peers !== undefined) {
+    const p = snap.num_peers;
+    const pEl = $('t-peers');
+    pEl.textContent = p;
+    if (p >= 3) { pEl.style.color = 'var(--green)'; pEl.style.textShadow = '0 0 8px var(--green)'; }
+    else if (p === 2) { pEl.style.color = 'var(--amber)'; pEl.style.textShadow = '0 0 8px var(--amber)'; }
+    else { pEl.style.color = 'var(--red)'; pEl.style.textShadow = '0 0 8px var(--red)'; }
+  }
+
   if(snap.wallet_confirmed !== undefined)
     $('t-wallet').textContent = fmtSat(snap.wallet_confirmed)+' sat';
-  $('t-uptime').textContent = S.uptime_pct_7d + '%';
+
+  const up = S.uptime_pct_7d || 0;
+  const upEl = $('t-uptime');
+  upEl.textContent = up + '%';
+  if (up >= 95) { upEl.style.color = 'var(--green)'; upEl.style.textShadow = '0 0 8px var(--green)'; }
+  else if (up >= 80) { upEl.style.color = 'var(--amber)'; upEl.style.textShadow = '0 0 8px var(--amber)'; }
+  else { upEl.style.color = 'var(--red)'; upEl.style.textShadow = '0 0 8px var(--red)'; }
 
   // sync dot
   const synced = snap.synced_to_chain === 1;
@@ -357,19 +372,30 @@ Muy desactualizado = colector no está corriendo.">
   // channels
   const chA = snap.channels_active || 0;
   const chT = snap.channels_total || 0;
-  $('l-ch-active').textContent = chA;
+  const chEl = $('l-ch-active');
+  chEl.textContent = chA;
   $('l-ch-total').textContent = chT;
   const pct = chT > 0 ? (chA/chT*100) : 0;
+  
+  let cColor = 'var(--green)';
+  if (pct < 40) cColor = 'var(--red)';
+  else if (pct < 80) cColor = 'var(--amber)';
+  
   $('l-ch-bar').style.width = pct + '%';
+  $('l-ch-bar').style.background = cColor;
+  chEl.style.color = cColor;
+  chEl.style.textShadow = `0 0 10px ${cColor}`;
 
   // gauge liquidez
   const liq = snap.liquidity_ratio || 0;
-  $('gauge-pct').textContent = liq.toFixed(1) + '%';
+  const liqEl = $('gauge-pct');
+  liqEl.textContent = liq.toFixed(1) + '%';
   const arc = document.getElementById('gauge-arc');
   const offset = 157 - (liq/100)*157;
   arc.setAttribute('stroke-dashoffset', offset);
-  const gc = liq > 70 || liq < 30 ? 'var(--amber)' : liq > 85 || liq < 15 ? 'var(--red)' : 'var(--green)';
+  const gc = (liq > 85 || liq < 15) ? 'var(--red)' : (liq > 70 || liq < 30) ? 'var(--amber)' : 'var(--green)';
   arc.setAttribute('stroke', gc);
+  liqEl.setAttribute('fill', gc);
 
   // capacity
   $('l-capacity').textContent = fmtSat(snap.capacity_total || 0);
@@ -378,8 +404,19 @@ Muy desactualizado = colector no está corriendo.">
   const z = snap.zombie_channels || 0;
   const zEl = $('l-zombies');
   zEl.textContent = z;
-  zEl.className = 'card-val' + (z > 0 ? ' amber' : ' green');
+  zEl.className = 'card-val ' + (z > 0 ? 'red' : 'green');
   $('l-zombie-cap').textContent = fmtSat(snap.inactive_capital_sat || 0) + ' sats inactivos';
+
+  if (S.zombies_list && S.zombies_list.length > 0) {
+    let zTip = "🧟 ZOMBIES DETECTADOS:\n";
+    S.zombies_list.forEach(zb => {
+      const alias = zb.peer_alias || 'Desconocido';
+      zTip += `- ${alias} (${fmtSat(zb.capacity)} sats)\n`;
+    });
+    zTip += "\nConsidera cerrar estos canales.";
+    const cardZ = $('card-zombies');
+    if (cardZ) cardZ.setAttribute('data-tip', zTip);
+  }
 
   // right panel
   $('r-fees-earned').textContent = fmtMsat(snap.fwd_fees_cum_msat || 0);
