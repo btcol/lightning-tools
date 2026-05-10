@@ -1053,6 +1053,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     )
 
     node_lookup_js = {}
+    adj_lookup_js = {}
     for i, pk in enumerate(node_pks):
         al = node_aliases[i]
         entry = {"pk":pk,"alias":al,"x":node_x[i],"y":node_y[i],"z":node_z[i],
@@ -1060,12 +1061,18 @@ def generate_3d_html(csv_path: Path, html_path: Path,
         node_lookup_js[pk]       = entry
         node_lookup_js[pk[:20]]  = entry
         node_lookup_js[al.lower()]= entry
+        adj_lookup_js[pk] = [n for n in G.neighbors(pk) if n in node_pks]
+        
     nl_json = json.dumps(node_lookup_js, ensure_ascii=False)
+    adj_json = json.dumps(adj_lookup_js, ensure_ascii=False)
 
     SEARCH_JS = f"""
 (function() {{
   const NODE_LOOKUP = {nl_json};
+  const ADJ_LOOKUP = {adj_json};
   let searchTraceIdx = null;
+  let focusTraceIndices = [];
+  let originalOpacities = {{}};
 
   // PANEL DE BÚSQUEDA
   const panel = document.createElement('div');
@@ -1126,8 +1133,20 @@ def generate_3d_html(csv_path: Path, html_path: Path,
   // FUNCIONALIDAD DE BÚSQUEDA
   function getGd() {{ return document.querySelector('.js-plotly-plot'); }}
   function removeSearchTrace() {{
-    const gd=getGd(); if(!gd||searchTraceIdx===null) return;
-    Plotly.deleteTraces(gd,searchTraceIdx); searchTraceIdx=null;
+    const gd=getGd(); if(!gd) return;
+    let toDelete = [];
+    if(searchTraceIdx !== null) {{ toDelete.push(searchTraceIdx); searchTraceIdx = null; }}
+    if(focusTraceIndices.length > 0) {{ toDelete.push(...focusTraceIndices); focusTraceIndices = []; }}
+    if(toDelete.length > 0) {{
+      toDelete.sort((a,b) => b-a);
+      Plotly.deleteTraces(gd, toDelete);
+    }}
+    if(Object.keys(originalOpacities).length > 0) {{
+       const indices = Object.keys(originalOpacities).map(Number);
+       const opacities = indices.map(i => originalOpacities[i]);
+       Plotly.restyle(gd, {{'opacity': opacities}}, indices);
+       originalOpacities = {{}};
+    }}
   }}
   function doSearch() {{
     const gd=getGd(); if(!gd) return;
@@ -1142,13 +1161,58 @@ def generate_3d_html(csv_path: Path, html_path: Path,
       status.style.display='block';return;}}
     const days_s=found.days<9999?found.days+' días':'desc.';
     const cap_s=found.cap?found.cap.toLocaleString()+' sats':'?';
-    Plotly.addTraces(gd,{{type:'scatter3d',x:[found.x],y:[found.y],z:[found.z],
+    
+    // ── Lógica de Ego-Network (Filtro 1 Salto) ──
+    const neighbors = ADJ_LOOKUP[found.pk] || [];
+    let n_x = [], n_y = [], n_z = [], n_hover = [], n_sizes = [], n_colors = [];
+    let e_x = [], e_y = [], e_z = [];
+    for (const npk of neighbors) {{
+       const nb = NODE_LOOKUP[npk];
+       if (!nb) continue;
+       n_x.push(nb.x); n_y.push(nb.y); n_z.push(nb.z);
+       n_hover.push('<b>' + nb.alias + '</b><br>' + nb.pk.slice(0,20) + '...<br>Canales: ' + nb.ch);
+       n_sizes.push(Math.max(8, Math.log2(Math.max(nb.ch, 1)) * 4));
+       let t = Math.min(nb.days / 30, 1.0);
+       let r = Math.floor(80 + 170 * t);
+       let g = Math.floor(230 - 180 * t);
+       n_colors.push(`rgb(${{r}},${{g}},100)`);
+       e_x.push(found.x, nb.x, null); e_y.push(found.y, nb.y, null); e_z.push(found.z, nb.z, null);
+    }}
+    
+    const neighborNodesTrace = {{
+        type: 'scatter3d', x: n_x, y: n_y, z: n_z, mode: 'markers+text', name: 'Vecinos (1 salto)',
+        marker: {{ size: n_sizes, color: n_colors, opacity: 1.0, line: {{width: 1, color: 'rgba(255,255,255,0.8)'}}, symbol: 'circle' }},
+        text: n_hover.map(h => h.split('<br>')[0].replace('<b>','').replace('</b>','')),
+        textfont: {{size: 9, color: 'white'}}, textposition: 'top center', hovertext: n_hover, hoverinfo: 'text', showlegend: true
+    }};
+    
+    const neighborEdgesTrace = {{
+        type: 'scatter3d', x: e_x, y: e_y, z: e_z, mode: 'lines', name: 'Canales vecinos',
+        line: {{color: 'rgba(0, 255, 237, 0.4)', width: 2}}, hoverinfo: 'skip', showlegend: true
+    }};
+
+    const indicesToDim = [];
+    for (let i = 0; i < gd.data.length; i++) {{
+        if (originalOpacities[i] === undefined) {{
+            originalOpacities[i] = gd.data[i].opacity !== undefined ? gd.data[i].opacity : 1.0;
+        }}
+        indicesToDim.push(i);
+    }}
+    if (indicesToDim.length > 0) {{
+        Plotly.restyle(gd, {{'opacity': 0.05}}, indicesToDim);
+    }}
+
+    const newTrace = {{type:'scatter3d',x:[found.x],y:[found.y],z:[found.z],
       mode:'markers',name:'🔍 Encontrado',
       marker:{{size:18,color:'#00ffed',opacity:1.0,symbol:'diamond',
                line:{{width:2,color:'white'}}}},
       hovertext:['<b>'+found.alias+'</b><br>Pubkey:'+found.pk.slice(0,20)+'...<br>'+
                  'Canales:'+found.ch+'<br>Cap:'+cap_s+'<br>Gossip:'+days_s],
-      hoverinfo:'text',showlegend:true}}).then(f=>{{searchTraceIdx=gd.data.length-1;}});
+      hoverinfo:'text',showlegend:true}};
+      
+    Plotly.addTraces(gd, [neighborEdgesTrace, neighborNodesTrace, newTrace]).then(f=>{{
+      const len = gd.data.length; searchTraceIdx = len - 1; focusTraceIndices = [len - 3, len - 2];
+    }});
     const cur=gd.layout.scene.annotations||[];
     const cleaned=cur.filter(a=>!a.text.startsWith('<b>🔍'));
     Plotly.relayout(gd,{{'scene.annotations':[...cleaned,{{x:found.x,y:found.y,z:found.z,
@@ -1294,6 +1358,29 @@ def generate_3d_html(csv_path: Path, html_path: Path,
           doSearch();
       }}
   }}, 100);
+
+  // ── Listener para clics en nodos 3D ────────────────────────────────────────
+  setTimeout(() => {{
+     const gd = getGd();
+     if (gd) {{
+         gd.on('plotly_click', function(data) {{
+             if (data.points && data.points.length > 0) {{
+                 const pt = data.points[0];
+                 let clickedPk = null;
+                 for (const [pk, val] of Object.entries(NODE_LOOKUP)) {{
+                     if (pk.length >= 66 && Math.abs(val.x - pt.x) < 0.0001 && Math.abs(val.y - pt.y) < 0.0001 && Math.abs(val.z - pt.z) < 0.0001) {{
+                         clickedPk = val.pk;
+                         break;
+                     }}
+                 }}
+                 if (clickedPk) {{
+                     input.value = clickedPk;
+                     doSearch();
+                 }}
+             }}
+         }});
+     }}
+  }}, 1500);
 
   // Iniciar loops
   startReloadTimer();
