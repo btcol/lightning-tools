@@ -13,9 +13,26 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 from datetime import datetime
+import json
 
 # Importar toda la lógica del núcleo
 import dashboard_core as core
+
+SETTINGS_FILE = core.DATA_DIR / "ui_settings.json"
+
+def load_settings():
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_settings(data):
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except:
+        pass
 
 class RedirectText:
     """Clase aux para redirigir stdout/stderr a un widget de texto."""
@@ -143,24 +160,24 @@ class LightningDashboard(tk.Tk):
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
         # Crear pestañas
+        self.tab_btcol   = ttk.Frame(self.notebook)
         self.tab_main    = ttk.Frame(self.notebook)
         self.tab_wallet  = ttk.Frame(self.notebook)
-        self.tab_peers   = ttk.Frame(self.notebook)
         self.tab_suggest = ttk.Frame(self.notebook)
         self.tab_open    = ttk.Frame(self.notebook)
         self.tab_close   = ttk.Frame(self.notebook)
 
+        self.notebook.add(self.tab_btcol,   text="btcol")
         self.notebook.add(self.tab_main,    text="Red & Cockpit HUD")
         self.notebook.add(self.tab_wallet,  text="Wallet On-chain")
-        self.notebook.add(self.tab_peers,   text="Peers")
         self.notebook.add(self.tab_suggest, text="Rebalanceo")
         self.notebook.add(self.tab_open,    text="Apertura Canales")
         self.notebook.add(self.tab_close,   text="Cierre Canales")
 
         # Construir cada panel
+        self._build_tab_btcol()
         self._build_tab_main()
         self._build_tab_wallet()
-        self._build_tab_peers()
         self._build_tab_suggest()
         self._build_tab_open()
         self._build_tab_close()
@@ -184,7 +201,7 @@ class LightningDashboard(tk.Tk):
             alias = info.get("alias", "sin_alias")
             height = info.get("block_height", 0)
             # En Tkinter, es seguro modificar widget text desde thread si no es agresivo
-            self.lbl_node_info.config(text=f"⭐ Nodo: {alias}  |  Pubkey: {self.my_pubkey[:16]}...  |  Altura: {height}  |  Red: {core.NETWORK}")
+            self.lbl_node_info.config(text=f"[*] Nodo: {alias}  |  Pubkey: {self.my_pubkey[:16]}...  |  Altura: {height}  |  Red: {core.NETWORK}")
         else:
             self.lbl_node_info.config(text="Nodo local no detectado. ¿Está LND en ejecución?")
 
@@ -233,7 +250,7 @@ class LightningDashboard(tk.Tk):
         ent_stats = ttk.Entry(stats_bar, textvariable=self.var_stats_interval, width=5)
         ent_stats.pack(side=tk.LEFT, padx=(2, 0))
         ent_stats.bind("<Return>", lambda e: self._update_stats_interval())
-        ttk.Button(stats_bar, text="▶ Snapshot ahora",
+        ttk.Button(stats_bar, text="> Snapshot ahora",
                    command=self._collect_stats_async).pack(side=tk.RIGHT, padx=5)
 
         # ── Fila 3: grid de métricas ──
@@ -265,7 +282,7 @@ class LightningDashboard(tk.Tk):
             val_lbl.grid(row=row, column=col + 1, sticky=tk.W, padx=(0, 18), pady=3)
             self._cockpit_labels[key] = val_lbl
 
-        ttk.Button(metrics_frame, text="↺ Refrescar métricas",
+        ttk.Button(metrics_frame, text="O Refrescar métricas",
                    command=self._cockpit_refresh_metrics
                    ).grid(row=2, column=0, columnspan=8, pady=(4, 0))
 
@@ -311,7 +328,7 @@ class LightningDashboard(tk.Tk):
             self.log_main.insert(tk.END, f"\n[] Auto-escaneo activado cada {self.var_auto_scan_secs.get()} segundos.\n", "info")
             self._auto_scan_loop()
         else:
-            self.log_main.insert(tk.END, "\n[⏹] Auto-escaneo desactivado.\n")
+            self.log_main.insert(tk.END, "\n[[]] Auto-escaneo desactivado.\n")
 
     def _auto_scan_loop(self):
         if not self.var_auto_scan.get():
@@ -725,46 +742,43 @@ class LightningDashboard(tk.Tk):
 
     # PANEL B: PEERS
     # =========================================================================
-    def _build_tab_peers(self):
-        top = ttk.Frame(self.tab_peers)
-        top.pack(fill=tk.X, pady=10)
+    def _build_tab_btcol(self):
+        top = ttk.Frame(self.tab_btcol)
+        top.pack(fill=tk.BOTH, expand=True, pady=20, padx=20)
         
-        ttk.Label(top, text="Conexiones P2P (Peers)", style="Header.TLabel").pack(side=tk.LEFT)
-        ttk.Button(top, text="Refrescar Peers", command=self._action_refresh_peers).pack(side=tk.RIGHT)
-
-        cols = ("estado", "pubkey", "address")
-        self.tree_peers = ttk.Treeview(self.tab_peers, columns=cols, show="headings", height=20)
-        self.tree_peers.heading("estado", text="ESTADO")
-        self.tree_peers.heading("pubkey", text="PUBKEY")
-        self.tree_peers.heading("address", text="DIRECCIÓN")
+        ttk.Label(top, text="Lightning Dashboard — btcol", style="Header.TLabel").pack(pady=(0, 10))
         
-        self.tree_peers.column("estado", width=120, anchor=tk.CENTER)
-        self.tree_peers.column("pubkey", width=450)
-        self.tree_peers.column("address", width=300)
+        info_text = (
+            "Este dashboard es un orquestador unificado para la Lightning Network.\n\n"
+            "Funcionalidades Principales:\n"
+            "- Red & Cockpit HUD: Visualización 3D y métricas de nodo.\n"
+            "- Wallet On-chain: Gestión de UTXOs, balances y backups (SCB).\n"
+            "- Rebalanceo: Automatización y ejecución de balances circulares.\n"
+            "- Apertura de Canales: Smart Open con recomendaciones de nodos.\n"
+            "- Cierre de Canales: Fuerza cooperativa o unilateral."
+        )
+        ttk.Label(top, text=info_text, justify=tk.CENTER).pack(pady=10)
         
-        self.tree_peers.pack(fill=tk.BOTH, expand=True, pady=5)
+        try:
+            date_str = subprocess.check_output(
+                ["git", "log", "-1", "--format=%cd", "--date=short"],
+                cwd=str(core.BASE_DIR), text=True
+            ).strip()
+            version_text = f"Última actualización (Commit): {date_str}"
+        except Exception:
+            version_text = "Versión: 1.0.0"
+            
+        ttk.Label(top, text=version_text, font=(core._FONT_UI, 10, "italic"), foreground=core.CLR_SUBTEXT).pack(pady=5)
         
-        self.tree_peers.tag_configure("CON_CANAL", foreground=core.CLR_GREEN)
-        self.tree_peers.tag_configure("SIN_CANAL", foreground=core.CLR_SUBTEXT)
-
-    def _action_refresh_peers(self):
-        for row in self.tree_peers.get_children():
-            self.tree_peers.delete(row)
-        
-        def run_script():
-            script = core.SCRIPTS_DIR / "02_list_peers.sh"
+        img_path = core.BASE_DIR / "images" / "ln-cockpit-Small.png"
+        if img_path.exists():
             try:
-                out = subprocess.check_output(["bash", str(script)], text=True)
-                for line in out.splitlines():
-                    if "|" in line:
-                        parts = [p.strip() for p in line.split("|")]
-                        if len(parts) == 3:
-                            tag = parts[0]
-                            self.tree_peers.insert("", tk.END, values=(parts[0], parts[1], parts[2]), tags=(tag,))
+                self.img_btcol = tk.PhotoImage(file=str(img_path))
+                ttk.Label(top, image=self.img_btcol).pack(pady=20)
             except Exception as e:
-                messagebox.showerror("Error", f"Fallo al listar peers:\n{e}")
-                
-        threading.Thread(target=run_script, daemon=True).start()
+                ttk.Label(top, text=f"[Imagen no soportada o con error: {e}]", foreground=core.CLR_RED).pack(pady=20)
+        else:
+            ttk.Label(top, text="[ln-cockpit-Small.png no encontrada]", foreground=core.CLR_RED).pack(pady=20)
 
     # =========================================================================
     # PANEL C: SUGERENCIAS REBALANCEO
@@ -774,6 +788,30 @@ class LightningDashboard(tk.Tk):
         top.pack(fill=tk.X, pady=10)
         
         ttk.Label(top, text="Top Candidatos de Rebalanceo", style="Header.TLabel").pack(side=tk.LEFT)
+        
+        # Cargar ratio desde settings o usar default
+        saved_ratio = load_settings().get("target_ratio", core.TARGET_RATIO)
+        self.var_target_ratio = tk.IntVar(value=saved_ratio)
+        
+        frame_ratio = ttk.Frame(top)
+        frame_ratio.pack(side=tk.RIGHT, padx=20)
+        
+        ttk.Label(frame_ratio, text="Ratio Local/Remoto:").pack(side=tk.LEFT, padx=5)
+        lbl_ratio_val = ttk.Label(frame_ratio, text=f"{saved_ratio}/{100-saved_ratio}", foreground=core.CLR_ACCENT)
+        lbl_ratio_val.pack(side=tk.RIGHT, padx=5)
+        
+        def on_ratio_change(val):
+            v = int(float(val))
+            lbl_ratio_val.config(text=f"{v}/{100-v}")
+            self.var_target_ratio.set(v)
+            # Guardar en json
+            st = load_settings()
+            st["target_ratio"] = v
+            save_settings(st)
+            
+        scale_ratio = ttk.Scale(frame_ratio, from_=10, to=90, orient=tk.HORIZONTAL, variable=self.var_target_ratio, command=on_ratio_change)
+        scale_ratio.pack(side=tk.RIGHT, padx=5)
+        
         ttk.Button(top, text="Calcular Sugerencias", command=self._action_calc_suggestions).pack(side=tk.RIGHT)
 
         cols = ("monto", "from_scid", "to_scid", "from_peer", "to_peer")
@@ -843,7 +881,7 @@ class LightningDashboard(tk.Tk):
         self.var_auto_reb = tk.BooleanVar(value=False)
         self.var_auto_interval = tk.StringVar(value="5")
 
-        ttk.Label(frame_auto, text="🤖 Piloto Automático Experimental:", style="Header.TLabel").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(frame_auto, text="[BOT] Piloto Automático Experimental:", style="Header.TLabel").pack(side=tk.LEFT, padx=(0, 10))
 
         chk = ttk.Checkbutton(frame_auto, text="Activar (Fondo)", 
                               variable=self.var_auto_reb, command=self._on_auto_reb_toggle)
@@ -869,7 +907,7 @@ class LightningDashboard(tk.Tk):
             if not channels:
                 self.bell()
                 return
-            sugs = core.suggest_rebalances(channels)
+            sugs = core.suggest_rebalances(channels, target_ratio=self.var_target_ratio.get())
             self.current_suggestions = sugs
             
             for s in sugs:
@@ -1000,7 +1038,7 @@ class LightningDashboard(tk.Tk):
                 logger("   [!] No hay canales disponibles.")
                 continue
                 
-            sugs = core.suggest_rebalances(channels)
+            sugs = core.suggest_rebalances(channels, target_ratio=self.var_target_ratio.get())
             if not sugs:
                 logger("   [!] No se encontraron rutas de rebalanceo viables.")
                 continue
@@ -1027,17 +1065,17 @@ class LightningDashboard(tk.Tk):
                 success = core.execute_rebalance(fscid, tpub, amt, current_fee, logger)
                 
                 if success:
-                    logger(f"   [AUTO-PILOTO] ✅ Rebalanceo exitoso con fee de {current_fee} sats.")
+                    logger(f"   [AUTO-PILOTO] [OK] Rebalanceo exitoso con fee de {current_fee} sats.")
                     # Actualizar la interfaz para que el próximo ciclo arranque desde este fee
                     self.var_fee.set(str(current_fee))
                     break
                 else:
-                    logger(f"   [AUTO-PILOTO] ❌ Falló con fee de {current_fee} sats.")
+                    logger(f"   [AUTO-PILOTO] [ERROR] Falló con fee de {current_fee} sats.")
                     if attempt < max_retries - 1:
                         current_fee += 1
                         logger(f"   [AUTO-PILOTO] Incrementando fee a {current_fee} sats y reintentando...")
                     else:
-                        logger(f"   [AUTO-PILOTO] ⚠️ Se alcanzó el límite de {max_retries} intentos. Se aborta esta pareja hasta el próximo ciclo.")
+                        logger(f"   [AUTO-PILOTO] [!] Se alcanzó el límite de {max_retries} intentos. Se aborta esta pareja hasta el próximo ciclo.")
 
     # =========================================================================
     # PANEL E: APERTURA DE CANALES
@@ -1130,6 +1168,7 @@ class LightningDashboard(tk.Tk):
 
         self.var_open_pubkey = tk.StringVar()
         self.var_open_amt    = tk.StringVar(value="50000")
+        self.var_push_amt    = tk.StringVar(value="0")
 
         ttk.Label(frame_inputs, text="Destino (PUBKEY):").grid(
             row=0, column=0, sticky=tk.E, padx=5, pady=5)
@@ -1140,6 +1179,13 @@ class LightningDashboard(tk.Tk):
             row=1, column=0, sticky=tk.E, padx=5, pady=5)
         ttk.Entry(frame_inputs, textvariable=self.var_open_amt, width=20).grid(
             row=1, column=1, sticky=tk.W)
+
+        ttk.Label(frame_inputs, text="Push Amt (sats a regalar):").grid(
+            row=2, column=0, sticky=tk.E, padx=5, pady=5)
+        push_frame = ttk.Frame(frame_inputs)
+        push_frame.grid(row=2, column=1, sticky=tk.W)
+        ttk.Entry(push_frame, textvariable=self.var_push_amt, width=20).pack(side=tk.LEFT)
+        ttk.Label(push_frame, text="[!] Precaución: Estos sats se regalarán al otro nodo", foreground=core.CLR_RED).pack(side=tk.LEFT, padx=10)
 
         btn_row = ttk.Frame(self.tab_open)
         btn_row.pack(fill=tk.X, pady=4)
@@ -1201,6 +1247,7 @@ class LightningDashboard(tk.Tk):
         """Conecta al nodo externo y abre un canal en un solo paso."""
         uri = self.var_ext_uri.get().strip()
         amt_str = self.var_open_amt.get().strip()
+        push_amt_str = self.var_push_amt.get().strip()
 
         if not uri:
             messagebox.showerror("Error", "Ingresa la URI del nodo (pubkey@ip:port).")
@@ -1218,6 +1265,19 @@ class LightningDashboard(tk.Tk):
             messagebox.showerror("Error", "El monto (Local Amt) debe ser un entero positivo.")
             return
 
+        try:
+            push_amt = int(push_amt_str)
+            if push_amt < 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Error", "El Push Amount debe ser un entero no negativo.")
+            return
+
+        if push_amt > 0:
+            msg = f"ATENCIÓN: Estás a punto de hacer un PUSH de {push_amt:,} sats.\n\nEsto significa que REGALARÁS esa cantidad al nodo remoto al abrir el canal. ¡No podrás recuperarlos a menos que te los devuelvan!\n\n¿Estás completamente seguro de continuar?"
+            if not messagebox.askyesno("Confirmar Push Amount", msg, icon='warning'):
+                return
+
         pubkey = uri.split("@")[0]
 
         def logger(msg):
@@ -1226,10 +1286,14 @@ class LightningDashboard(tk.Tk):
 
         logger(f"\n[{datetime.now().strftime('%H:%M:%S')}]  Conectar + Abrir Canal")
         logger(f"   URI:    {uri}")
-        logger(f"   Monto:  {amt:,} sats\n")
+        logger(f"   Monto:  {amt:,} sats")
+        if push_amt > 0:
+            logger(f"   Push:   {push_amt:,} sats (a regalar)\n")
+        else:
+            logger("\n")
 
         def run():
-            success = core.execute_openchannel(pubkey, amt, logger, host_uri=uri)
+            success = core.execute_openchannel(pubkey, amt, logger, host_uri=uri, push_amt=push_amt)
             if success:
                 logger("\n[] Canal en estado pending. ¡Revisa tu lista de peers!")
                 self._action_refresh_wallet()
@@ -1279,6 +1343,7 @@ class LightningDashboard(tk.Tk):
     def _action_open_channel(self):
         pubkey = self.var_open_pubkey.get().strip()
         amt_str = self.var_open_amt.get().strip()
+        push_amt_str = self.var_push_amt.get().strip()
         
         if not pubkey:
             messagebox.showerror("Error", "Falta la PUBKEY del nodo destino.")
@@ -1291,16 +1356,32 @@ class LightningDashboard(tk.Tk):
             messagebox.showerror("Error", "El monto de fondos (sats) debe ser entero positivo.")
             return
             
+        try:
+            push_amt = int(push_amt_str)
+            if push_amt < 0: raise ValueError
+        except ValueError:
+            messagebox.showerror("Error", "El Push Amount debe ser un entero no negativo.")
+            return
+
+        if push_amt > 0:
+            msg = f"ATENCIÓN: Estás a punto de hacer un PUSH de {push_amt:,} sats.\n\nEsto significa que REGALARÁS esa cantidad al nodo remoto al abrir el canal. ¡No podrás recuperarlos a menos que te los devuelvan!\n\n¿Estás completamente seguro de continuar?"
+            if not messagebox.askyesno("Confirmar Push Amount", msg, icon='warning'):
+                return
+            
         def logger(msg):
             self.log_open.insert(tk.END, msg + "\n")
             self.log_open.see(tk.END)
 
         logger(f"\n[{datetime.now().strftime('%H:%M:%S')}] Iniciando Apertura de Canal ")
         logger(f"   Destino (Pubkey): {pubkey[:20]}...")
-        logger(f"   Local Amt: {amt:,} sats\n")
+        logger(f"   Local Amt: {amt:,} sats")
+        if push_amt > 0:
+            logger(f"   Push:      {push_amt:,} sats (a regalar)\n")
+        else:
+            logger("\n")
 
         def run_open():
-            success = core.execute_openchannel(pubkey, amt, logger)
+            success = core.execute_openchannel(pubkey, amt, logger, push_amt=push_amt)
             if success:
                 logger("\n[] Canal en estado pending. ¡Revisa tu lista de peers pronto!")
                 self._action_refresh_wallet()

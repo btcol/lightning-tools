@@ -3,7 +3,7 @@
 ![Lightning Dashboard](lightning-dashboard/images/ln-cockpit-Big.png)
 
 > [!IMPORTANT]
-> **🚀 NUEVA VERSIÓN GRÁFICA:** Te sugerimos encarecidamente dirigirte a la subcarpeta [`lightning-dashboard`](./lightning-dashboard/). Allí encontrarás una interfaz gráfica (GUI) unificada que contiene elementos nuevos y procesos mucho más automatizados (gestión de billetera on-chain, apertura inteligente de canales, rebalanceo circular predictivo y métricas en tiempo real) que reemplazan el uso de los scripts individuales de este directorio.
+> **🚀 NUEVA VERSIÓN GRÁFICA:** Te sugerimos encarecidamente dirigirte a la subcarpeta [`lightning-dashboard`](./lightning-dashboard/). Allí encontrarás una interfaz gráfica (GUI) unificada que contiene elementos nuevos y procesos mucho más automatizados (gestión de billetera on-chain, apertura inteligente de canales con Push Amount, rebalanceo circular predictivo y métricas en tiempo real) que reemplazan el uso de los scripts individuales de este directorio.
 
 Multiples herramientas para administrar de forma mas amigable los nodos en Lightning Network, basado en comandos LNCLI y Python.
 
@@ -18,11 +18,11 @@ El conjunto de utilidades funciona interactuando directamente con la interfaz de
 
 ## Componentes Principales
 - `nodo_testnet4.sh`: Inicializa `bitcoind` y `lnd` sobre la testnet4, junto al entorno base de billeteras on-chain.
-- `listpeers.sh`: Imprime reporte rápido de la lista de peers P2P y su intersección con los canales abiertos locales.
-- `vecinos_canales.sh`: Poderoso colector de red. Lee la estructura Graph pública y computa toda la red circundante al nodo, exportando un archivo `.csv`.
-- `visualizar_red_3d.py`: Lee la información compilada y dibuja un escenario 3D interactivo con HTML dinámico vía Plotly.
-- `plan_rebalance_testnet4.sh` / `plan_rebalance_invoice_testnet4.sh`: Generadores de planes y ejecutores manuales de rutas circulares limitadas por fee (PPM).
+- `mineria.sh`: Script persistente de minería en Testnet4 con auto-recuperación que interactúa directamente con el nodo LND.
 - `send_coins.sh`: Utilidad on-chain de envío programable de transacciones crudas a la cartera del nodo.
+- `start-server-protocol.sh`: Script auxiliar para la inicialización de protocolos.
+
+> **Nota:** Herramientas antiguas (como `vecinos_canales.sh`, `visualizar_red_3d.py`, generadores de rebalanceo y listado de peers en CLI) han sido deprecadas. Todas esas funcionalidades fueron mejoradas e integradas dentro de la GUI en la subcarpeta `lightning-dashboard`.
 
 ## Instalación de Dependencias
 Ver `requirements.txt` para dependencias de los analizadores escritos en Python.

@@ -225,7 +225,7 @@ def execute_closechannel(chan_point: str, force: bool, log_callback) -> bool:
     log(f"[{datetime.now().strftime('%H:%M:%S')}] Petición de cierre para {chan_point} ...")
     
     if ":" not in chan_point:
-        log("❌ El identificador del canal debe contener ':' (txid:index)")
+        log("[ERROR] El identificador del canal debe contener ':' (txid:index)")
         return False
         
     txid, index = chan_point.split(":")
@@ -248,17 +248,17 @@ def execute_closechannel(chan_point: str, force: bool, log_callback) -> bool:
         proc.wait(timeout=90)
         
         if proc.returncode == 0:
-            log("✅ ¡Comando closechannel enviado exitosamente!")
+            log("[OK] ¡Comando closechannel enviado exitosamente!")
             return True
         else:
-            log(f"❌ closechannel falló con código {proc.returncode}")
+            log(f"[ERROR] closechannel falló con código {proc.returncode}")
             return False
     except subprocess.TimeoutExpired:
         proc.kill()
-        log("❌ Timeout ejecutando closechannel.")
+        log("[ERROR] Timeout ejecutando closechannel.")
         return False
     except Exception as e:
-        log(f"❌ Excepción ejecutando closechannel: {e}")
+        log(f"[ERROR] Excepción ejecutando closechannel: {e}")
         return False
 
 
@@ -349,19 +349,19 @@ def execute_rebalance(from_scid: str, to_pub: str, amt_sats: int,
             timeout=20
         )
     except RuntimeError as e:
-        log(f"❌ Error creando invoice: {e}")
+        log(f"[ERROR] Error creando invoice: {e}")
         return False
 
     payment_request = inv.get("payment_request", "")
     payment_hash    = inv.get("r_hash") or inv.get("r_hash_str") or inv.get("payment_hash", "")
-    log(f"   ✅ Invoice creada. Hash: {payment_hash[:20]}...")
+    log(f"   [OK] Invoice creada. Hash: {payment_hash[:20]}...")
 
     log(f"[2/3] Calculando chan_id uint64 para SCID {from_scid}...")
     try:
         from_chan_id = scid_to_uint64(from_scid)
-        log(f"   ✅ chan_id uint64 = {from_chan_id}")
+        log(f"   [OK] chan_id uint64 = {from_chan_id}")
     except Exception as e:
-        log(f"❌ Error calculando chan_id: {e}")
+        log(f"[ERROR] Error calculando chan_id: {e}")
         return False
 
     log(f"[3/3] Ejecutando payinvoice...")
@@ -392,17 +392,17 @@ def execute_rebalance(from_scid: str, to_pub: str, amt_sats: int,
             log(f"   {line.rstrip()}")
         proc.wait(timeout=120)
         if proc.returncode == 0:
-            log("✅ ¡Rebalanceo exitoso!")
+            log("[OK] ¡Rebalanceo exitoso!")
             return True
         else:
-            log(f"❌ payinvoice terminó con código {proc.returncode}")
+            log(f"[ERROR] payinvoice terminó con código {proc.returncode}")
             return False
     except subprocess.TimeoutExpired:
         proc.kill()
-        log("❌ Timeout: el pago tardó más de 120 segundos.")
+        log("[ERROR] Timeout: el pago tardó más de 120 segundos.")
         return False
     except Exception as e:
-        log(f"❌ Error ejecutando payinvoice: {e}")
+        log(f"[ERROR] Error ejecutando payinvoice: {e}")
         return False
 
 
@@ -482,27 +482,28 @@ def execute_connect(uri: str, log_callback) -> bool:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         out = (res.stdout + res.stderr).strip()
         if "already connected to peer" in out:
-            log("   ✅ Ya estás conectado a este peer.")
+            log("   [OK] Ya estás conectado a este peer.")
             return True
         if res.returncode == 0:
-            log("   ✅ Conexión P2P establecida.")
+            log("   [OK] Conexión P2P establecida.")
             return True
-        log(f"   ❌ Fallo en connect (código {res.returncode}): {out[:200]}")
+        log(f"   [ERROR] Fallo en connect (código {res.returncode}): {out[:200]}")
         return False
     except subprocess.TimeoutExpired:
-        log("   ❌ Timeout esperando respuesta del nodo remoto.")
+        log("   [ERROR] Timeout esperando respuesta del nodo remoto.")
         return False
     except Exception as e:
-        log(f"   ❌ Excepción en connect: {e}")
+        log(f"   [ERROR] Excepción en connect: {e}")
         return False
 
 
 def execute_openchannel(pubkey: str, amt_sats: int, log_callback,
-                        host_uri: str = None) -> bool:
+                        host_uri: str = None, push_amt: int = 0) -> bool:
     """
     Abre un canal con el nodo indicado.
     - Si se pasa host_uri (pubkey@ip:port), usa ese para conectar directamente.
     - Si no, intenta obtener la dirección del grafo de la red.
+    - push_amt: cantidad de sats a regalar al otro lado del canal.
     """
     log = log_callback
 
@@ -521,9 +522,9 @@ def execute_openchannel(pubkey: str, amt_sats: int, log_callback,
                 host = addrs[0]["addr"]
                 log(f"   Dirección del grafo: {host}")
             else:
-                log("   ⚠️ No se encontraron p2p_addresses en el grafo.")
+                log("   [!] No se encontraron p2p_addresses en el grafo.")
         except Exception as e:
-            log(f"   ⚠️ Fallo al consultar el grafo: {e}")
+            log(f"   [!] Fallo al consultar el grafo: {e}")
 
     # 2. Conectar P2P
     if host:
@@ -536,24 +537,29 @@ def execute_openchannel(pubkey: str, amt_sats: int, log_callback,
             if "already connected to peer" in out:
                 log("   Ya conectado.")
             elif res.returncode == 0:
-                log("   ✅ Conexión P2P exitosa.")
+                log("   [OK] Conexión P2P exitosa.")
             else:
-                log(f"   ⚠️ Fallo en connect: {out.strip()[:200]}")
+                log(f"   [!] Fallo en connect: {out.strip()[:200]}")
         except subprocess.TimeoutExpired:
-            log("   ⚠️ Timeout en connect. Intentando openchannel de todas formas...")
+            log("   [!] Timeout en connect. Intentando openchannel de todas formas...")
         except Exception as e:
-            log(f"   ⚠️ Error en connect: {e}")
+            log(f"   [!] Error en connect: {e}")
     else:
         log("[2/3] Sin dirección conocida. Confiando en la tabla de ruteo interna...")
 
     # 3. Ejecutar openchannel
     log(f"[3/3] Abriendo canal con un fondo local de {amt_sats:,} sats...")
+    if push_amt > 0:
+        log(f"   [!] Push Amount: REGALANDO {push_amt:,} sats al nodo remoto...")
+        
     cmd_open = [
         LNCLI_BIN, f"-network={NETWORK}",
         "openchannel",
         f"--node_key={pubkey}",
         f"--local_amt={amt_sats}"
     ]
+    if push_amt > 0:
+        cmd_open.append(f"--push_amt={push_amt}")
     
     try:
         # Popen en block
@@ -563,13 +569,13 @@ def execute_openchannel(pubkey: str, amt_sats: int, log_callback,
         proc.wait(timeout=60)
         
         if proc.returncode == 0:
-            log(f"✅ ¡Comando openchannel enviado exitosamente!")
+            log(f"[OK] ¡Comando openchannel enviado exitosamente!")
             return True
         else:
-            log(f"❌ openchannel falló con código {proc.returncode}")
+            log(f"[ERROR] openchannel falló con código {proc.returncode}")
             return False
     except Exception as e:
-        log(f"❌ Excepción ejecutando openchannel: {e}")
+        log(f"[ERROR] Excepción ejecutando openchannel: {e}")
         return False
 
 
@@ -853,11 +859,11 @@ def read_history_stats(db_path: Path = None) -> dict:
 def generate_3d_html(csv_path: Path, html_path: Path,
                      my_pubkey: str = None, log_cb=print) -> bool:
     if not HAS_PLOTLY:
-        log_cb("❌ Faltan dependencias: pip install pandas plotly networkx")
+        log_cb("[ERROR] Faltan dependencias: pip install pandas plotly networkx")
         return False
 
     if not csv_path.exists():
-        log_cb(f"❌ CSV no encontrado: {csv_path}")
+        log_cb(f"[ERROR] CSV no encontrado: {csv_path}")
         return False
 
     log_cb(f"Cargando {csv_path.name}...")
@@ -944,7 +950,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     node_y = [pos3d[n][1] for n in node_pks]
     node_z = [pos3d[n][2] for n in node_pks]
     node_aliases  = [G.nodes[n].get("alias","") or n[:10] for n in node_pks]
-    node_channels = [G.degree(n) for n in node_pks]
+    node_channels = [max(G.degree(n), G.nodes[n].get("channels_gossip",0)) for n in node_pks]
     node_total_cap= [G.nodes[n].get("total_cap",0) for n in node_pks]
     node_days     = [G.nodes[n].get("days_ago",9999) for n in node_pks]
     node_gossip   = [G.nodes[n].get("channels_gossip",0) for n in node_pks]
@@ -1018,7 +1024,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     if my_idx is not None:
         mx,my_,mz = node_x[my_idx],node_y[my_idx],node_z[my_idx]
         fig.add_trace(go.Scatter3d(
-            x=[mx],y=[my_],z=[mz],mode="markers",name="⭐ Mi nodo",
+            x=[mx],y=[my_],z=[mz],mode="markers",name="[*] Mi nodo",
             marker=dict(size=max(14,node_sizes[my_idx]*1.4),color="#FFD700",
                         opacity=1.0,symbol="diamond",line=dict(width=2,color="white")),
             hovertext=[node_text[my_idx]],hoverinfo="text"))
@@ -1027,11 +1033,11 @@ def generate_3d_html(csv_path: Path, html_path: Path,
             arrowcolor="#FFD700",ax=70,ay=-55,
             font=dict(size=11,color="#FFD700"),
             bgcolor="rgba(10,10,30,0.7)",bordercolor="#FFD700",borderwidth=1)]
-        log_cb(f"  ⭐ Tu nodo '{node_aliases[my_idx]}' marcado en dorado.")
+        log_cb(f"  [*] Tu nodo '{node_aliases[my_idx]}' marcado en dorado.")
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     fig.update_layout(
-        title=dict(text=f"<b>⚡ Red Lightning — Visualización 3D</b><br>"
+        title=dict(text=f"<b>LN Red Lightning — Visualización 3D</b><br>"
                         f"<sub>{G.number_of_nodes()} nodos · {len(edges)} canales · {now_str}</sub>",
                    x=0.5,xanchor="center",font=dict(size=18,color="white")),
         scene=dict(
@@ -1081,14 +1087,14 @@ def generate_3d_html(csv_path: Path, html_path: Path,
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:6px;align-items:center;';
   const input = document.createElement('input');
-  input.type='text'; input.placeholder='🔍 alias o pubkey...';
+  input.type='text'; input.placeholder='[SEARCH] alias o pubkey...';
   input.style.cssText=`background:rgba(10,10,30,0.92);border:1px solid rgba(0,220,255,0.55);
     border-radius:6px;color:#00dcff;font-size:13px;padding:6px 10px;width:220px;outline:none;
     box-shadow:0 0 8px rgba(0,220,255,0.25);`;
   const btn = document.createElement('button'); btn.textContent='Buscar';
   btn.style.cssText=`background:rgba(0,180,255,0.18);border:1px solid rgba(0,220,255,0.55);
     border-radius:6px;color:#00dcff;font-size:13px;padding:6px 12px;cursor:pointer;`;
-  const clearBtn = document.createElement('button'); clearBtn.textContent='✕';
+  const clearBtn = document.createElement('button'); clearBtn.textContent='[X]';
   clearBtn.style.cssText=`background:rgba(255,60,60,0.15);border:1px solid rgba(255,100,100,0.5);
     border-radius:6px;color:#ff6666;font-size:13px;padding:6px 10px;cursor:pointer;`;
   const status = document.createElement('div');
@@ -1106,9 +1112,9 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     border-radius:8px;padding:12px;color:#ddd;box-shadow:0 8px 16px rgba(0,0,0,0.6);`;
   
   leg.innerHTML = `
-    <div style="font-weight:bold;color:#fff;margin-bottom:4px;font-size:13px;">ℹ️ Leyenda de Nodos</div>
-    <div><span style="font-size:14px;">◉</span> <b>Tamaño:</b> Proporcional al Nº de canales</div>
-    <div><span style="font-size:14px;">🎨</span> <b>Color:</b> Último chisme (gossip)</div>
+    <div style="font-weight:bold;color:#fff;margin-bottom:4px;font-size:13px;">[INFO] Leyenda de Nodos</div>
+    <div><span style="font-size:14px;">(*)</span> <b>Tamaño:</b> Proporcional al Nº de canales</div>
+    <div><span style="font-size:14px;">[UI]</span> <b>Color:</b> Último chisme (gossip)</div>
     <div style="display:flex;align-items:center;margin-top:4px;">
       <span style="background:#50e664;width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;"></span> Reciente (< 30 días)
     </div>
@@ -1117,11 +1123,11 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     </div>
     <hr style="border:0;border-top:1px solid rgba(255,255,255,0.2);margin:8px 0;width:100%;">
     <div style="display:flex;align-items:center;justify-content:space-between;">
-      <label for="camSpeed" style="cursor:pointer;font-weight:bold;color:#00ffed;">↻ Auto-Giro:</label>
+      <label for="camSpeed" style="cursor:pointer;font-weight:bold;color:#00ffed;">O Auto-Giro:</label>
       <input type="range" id="camSpeed" min="0" max="50" value="6" style="width:80px;cursor:pointer;">
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;">
-      <label for="autoReload" style="cursor:pointer;font-weight:bold;color:#ffcc00;">🔁 Auto-Refresco:</label>
+      <label for="autoReload" style="cursor:pointer;font-weight:bold;color:#ffcc00;">[LOOP] Auto-Refresco:</label>
       <div style="display:flex;align-items:center;gap:5px;">
         <input type="checkbox" id="autoReload" style="cursor:pointer;">
         <input type="number" id="reloadSecs" value="30" min="5" style="width:35px;background:#000;color:#ffcc00;border:1px solid #ffcc00;font-size:10px;text-align:center;">
@@ -1157,7 +1163,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     if(!found) for(const [k,v] of Object.entries(NODE_LOOKUP))
       if(k.toLowerCase().includes(ql)&&v.alias){{found=v;break;}}
     removeSearchTrace();
-    if(!found){{status.textContent='⚠ Nodo no encontrado.';status.style.color='#ff8888';
+    if(!found){{status.textContent='[!] Nodo no encontrado.';status.style.color='#ff8888';
       status.style.display='block';return;}}
     const days_s=found.days<9999?found.days+' días':'desc.';
     const cap_s=found.cap?found.cap.toLocaleString()+' sats':'?';
@@ -1203,7 +1209,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     }}
 
     const newTrace = {{type:'scatter3d',x:[found.x],y:[found.y],z:[found.z],
-      mode:'markers',name:'🔍 Encontrado',
+      mode:'markers',name:'[SEARCH] Encontrado',
       marker:{{size:18,color:'#00ffed',opacity:1.0,symbol:'diamond',
                line:{{width:2,color:'white'}}}},
       hovertext:['<b>'+found.alias+'</b><br>Pubkey:'+found.pk.slice(0,20)+'...<br>'+
@@ -1214,20 +1220,20 @@ def generate_3d_html(csv_path: Path, html_path: Path,
       const len = gd.data.length; searchTraceIdx = len - 1; focusTraceIndices = [len - 3, len - 2];
     }});
     const cur=gd.layout.scene.annotations||[];
-    const cleaned=cur.filter(a=>!a.text.startsWith('<b>🔍'));
+    const cleaned=cur.filter(a=>!a.text.startsWith('<b>[SEARCH]'));
     Plotly.relayout(gd,{{'scene.annotations':[...cleaned,{{x:found.x,y:found.y,z:found.z,
-      text:'<b>🔍 '+found.alias+'</b>',showarrow:true,arrowhead:2,
+      text:'<b>[SEARCH] '+found.alias+'</b>',showarrow:true,arrowhead:2,
       arrowcolor:'#00ffed',ax:-70,ay:55,
       font:{{size:12,color:'#00ffed'}},bgcolor:'rgba(0,30,30,0.8)',
       bordercolor:'#00ffed',borderwidth:1}}]}});
-    status.innerHTML='✅ <b>'+found.alias+'</b> | ch:'+found.ch+' | cap:'+cap_s;
+    status.innerHTML='[OK] <b>'+found.alias+'</b> | ch:'+found.ch+' | cap:'+cap_s;
     status.style.color='#aaffee'; status.style.display='block';
   }}
   function doClear() {{
     input.value=''; removeSearchTrace(); sessionStorage.removeItem('savedSearchQuery');
     const gd=getGd(); if(gd){{
       const cur=gd.layout.scene.annotations||[];
-      Plotly.relayout(gd,{{'scene.annotations':cur.filter(a=>!a.text.startsWith('<b>🔍'))}});
+      Plotly.relayout(gd,{{'scene.annotations':cur.filter(a=>!a.text.startsWith('<b>[SEARCH]'))}});
     }}
     status.style.display='none';
   }}
@@ -1389,7 +1395,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
 """
     html_path.parent.mkdir(parents=True, exist_ok=True)
     fig.write_html(str(html_path), include_plotlyjs="cdn", post_script=SEARCH_JS)
-    log_cb(f"✅ HTML guardado en: {html_path.name}")
+    log_cb(f"[OK] HTML guardado en: {html_path.name}")
     return True
 
 
@@ -1402,7 +1408,7 @@ COCKPIT_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>⚡ Lightning Cockpit HUD</title>
+<title>LN Lightning Cockpit HUD</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
@@ -1528,14 +1534,14 @@ COCKPIT_HTML = """<!DOCTYPE html>
 
   <!-- TOP BAR -->
   <div id="hud-top" class="hud-panel">
-    <div class="logo">⚡ LN·COCKPIT</div>
+    <div class="logo">LN LN·COCKPIT</div>
     <div class="top-seg tip" data-tip="Alias del nodo anunciado al grafo Lightning.
 Debe coincidir con lnd.conf.">
       <span class="lbl">Nodo</span>
       <span class="val" id="t-alias">—</span>
     </div>
-    <div class="top-seg tip" data-tip="🟢 OK = sincronizado y operativo.
-🔴 NO = offline o atrasado.
+    <div class="top-seg tip" data-tip="[ON] OK = sincronizado y operativo.
+[OFF] NO = offline o atrasado.
 Ningún pago se enruta si NO está sincronizado.">
       <span class="lbl">Sync</span>
       <span class="val" id="t-sync"><span id="sync-dot"></span><span id="sync-txt">—</span></span>
@@ -1582,7 +1588,7 @@ Demasiado on-chain = capital sin trabajar.">
     <div class="card tip" data-tip="Ideal: ≥80% de canales activos.
 Inactivos = peer desconectado.
 Si persiste &gt;24h, considera cerrar el canal.">
-      <div class="card-title">📡 Canales</div>
+      <div class="card-title">[NET] Canales</div>
       <div class="card-val" id="l-ch-active">—</div>
       <div class="card-sub">activos / <span id="l-ch-total">—</span> total</div>
       <div class="bar-meter" style="margin-top:6px;">
@@ -1594,7 +1600,7 @@ Si persiste &gt;24h, considera cerrar el canal.">
 &lt;20% = sin liquidez saliente (no puedes enviar).
 &gt;80% = sin liquidez entrante (no puedes recibir).
 Equilibrio = más enrutamiento posible.">
-      <div class="card-title">💧 Liquidez Local</div>
+      <div class="card-title">[LIQ] Liquidez Local</div>
       <div class="gauge-wrap">
         <svg width="110" height="70" viewBox="0 0 110 70">
           <path d="M5,60 A50,50 0 0,1 105,60" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10" stroke-linecap="round"/>
@@ -1610,7 +1616,7 @@ Equilibrio = más enrutamiento posible.">
 A mayor capacidad, más atractivo como hub.
 Mainnet: nodos relevantes &gt;10M sats.
 Capital en on-chain = capital sin trabajar.">
-      <div class="card-title">⚡ Capacidad Total</div>
+      <div class="card-title">LN Capacidad Total</div>
       <div class="card-val" style="font-size:21px;" id="l-capacity">—</div>
       <div class="card-sub">sats en canales</div>
     </div>
@@ -1619,7 +1625,7 @@ Capital en on-chain = capital sin trabajar.">
 Canal activo sin actualizaciones en &gt;7 días.
 Capital inmovilizado e improductivo.
 Considera cerrar zombies persistentes.">
-      <div class="card-title">🧟 Zombies</div>
+      <div class="card-title">[ZOMBIE] Zombies</div>
       <div class="card-val" id="l-zombies">—</div>
       <div class="card-sub" id="l-zombie-cap">— sats inactivos</div>
     </div>
@@ -1639,7 +1645,7 @@ Considera cerrar zombies persistentes.">
 Tendencia creciente = nodo utilizado como hub.
 Mainnet: buenos nodos ganan 100k+ msat/mes.
 Testnet4: cifras bajas son normales.">
-      <div class="card-title">📈 Fees Ganadas (cum.)</div>
+      <div class="card-title">[UP] Fees Ganadas (cum.)</div>
       <div class="card-val green" id="r-fees-earned">—</div>
       <div class="card-sub">msat enrutamiento</div>
     </div>
@@ -1648,7 +1654,7 @@ Testnet4: cifras bajas son normales.">
 Debe ser MENOR que las fees ganadas.
 Si supera lo ganado, estás subsidiando la red.
 Revisa frecuencia y costo de rebalanceos.">
-      <div class="card-title">📉 Fees Pagadas (cum.)</div>
+      <div class="card-title">[DOWN] Fees Pagadas (cum.)</div>
       <div class="card-val amber" id="r-fees-paid">—</div>
       <div class="card-sub">msat rebalanceos</div>
     </div>
@@ -1657,7 +1663,7 @@ Revisa frecuencia y costo de rebalanceos.">
 Vol: sats totales que pasaron por ti.
 Más forwards = mejor posición en la red.
 Forwards grandes = pagos relevantes enrutados.">
-      <div class="card-title">⚡ Forwards (cum.)</div>
+      <div class="card-title">LN Forwards (cum.)</div>
       <div class="card-val" id="r-fwd-count">—</div>
       <div class="card-sub">Vol: <span id="r-fwd-vol">—</span> sats</div>
     </div>
@@ -1666,7 +1672,7 @@ Forwards grandes = pagos relevantes enrutados.">
 &lt;50% Excelente — nodo muy rentable.
 50–100% Aceptable — margen mejorable.
 &gt;100% Pérdida — rebalanceos demasiado caros.">
-      <div class="card-title">⚖️ Ratio Rebalan/Enrut.</div>
+      <div class="card-title">[BALANCE] Ratio Rebalan/Enrut.</div>
       <div class="card-val" id="r-ratio">—</div>
       <div class="card-sub">fees_paid / fees_earned</div>
     </div>
@@ -1675,7 +1681,7 @@ Forwards grandes = pagos relevantes enrutados.">
 Cuánto de tu capital está 'trabajando'.
 Mainnet: &gt;1% mensual es aceptable.
 Si es 0% en mainnet: revisar fees y conectividad.">
-      <div class="card-title">🎯 Efic. Capital</div>
+      <div class="card-title">[TARGET] Efic. Capital</div>
       <div class="card-val" id="r-efficiency">—</div>
       <div class="card-sub">sats_enrutados / capacidad</div>
     </div>
@@ -1687,7 +1693,7 @@ Si es 0% en mainnet: revisar fees y conectividad.">
     <div class="spark-wrap tip" data-tip="Barras diarias: verde=ganadas, amarillo=pagadas.
 Barras verdes más altas = nodo rentable ese día.
 Días vacíos = sin actividad de enrutamiento.">
-      <div class="spark-title">📊 Fees Ganadas vs Pagadas — 7 días</div>
+      <div class="spark-title">[CHART] Fees Ganadas vs Pagadas — 7 días</div>
       <svg id="spark-daily" viewBox="0 0 300 55" preserveAspectRatio="none">
         <text x="150" y="30" fill="rgba(136,136,170,.5)" text-anchor="middle" font-size="10" font-family="monospace">Sin datos</text>
       </svg>
@@ -1697,7 +1703,7 @@ Días vacíos = sin actividad de enrutamiento.">
 Picos = alta actividad de enrutamiento.
 Plano en 0 = sin tráfico (normal en testnet4).
 Tendencia creciente = ganando relevancia en la red.">
-      <div class="spark-title">⚡ Forwards por hora — 24h</div>
+      <div class="spark-title">LN Forwards por hora — 24h</div>
       <svg id="spark-hourly" viewBox="0 0 300 55" preserveAspectRatio="none">
         <text x="150" y="30" fill="rgba(136,136,170,.5)" text-anchor="middle" font-size="10" font-family="monospace">Sin datos</text>
       </svg>
@@ -1707,7 +1713,7 @@ Tendencia creciente = ganando relevancia en la red.">
 + Verde = nodo rentable.
 - Rojo = gastas más en rebalanceos de lo que ganas.
 Objetivo: siempre positivo.">
-      <div class="bot-label">💰 Net Profit 7d</div>
+      <div class="bot-label">[$] Net Profit 7d</div>
       <div class="bot-val" style="font-size:26px;" id="b-net-profit">—</div>
       <div class="card-sub" id="b-net-sub">fees_earned - fees_paid</div>
     </div>
@@ -1715,7 +1721,7 @@ Objetivo: siempre positivo.">
     <div class="bot-seg tip" data-tip="Timestamp del último registro en node_history.db.
 Debe ser reciente (min = intervalo configurado).
 Muy desactualizado = colector no está corriendo.">
-      <div class="bot-label">🕒 Último Snapshot</div>
+      <div class="bot-label">[TIME] Último Snapshot</div>
       <div class="bot-val" style="font-size:16px;" id="b-snap-ts">—</div>
       <div class="card-sub">Datos en tiempo real</div>
     </div>
@@ -1807,7 +1813,7 @@ Muy desactualizado = colector no está corriendo.">
   $('l-zombie-cap').textContent = fmtSat(snap.inactive_capital_sat || 0) + ' sats inactivos';
 
   if (S.zombies_list && S.zombies_list.length > 0) {
-    let zTip = "🧟 ZOMBIES DETECTADOS:\\n";
+    let zTip = "[ZOMBIE] ZOMBIES DETECTADOS:\\n";
     S.zombies_list.forEach(zb => {
       const alias = zb.peer_alias || 'Desconocido';
       zTip += `- ${alias} (${fmtSat(zb.capacity)} sats)\\n`;
@@ -1998,19 +2004,19 @@ def generate_cockpit_html(csv_path: Path = None, cockpit_path: Path = None,
     # 1. Generar (o reutilizar) el grafo 3D
     if skip_graph:
         if not graph_html_path.exists():
-            log_cb("⚠️  No existe el grafo 3D previo; generando por primera vez...")
+            log_cb("[!]  No existe el grafo 3D previo; generando por primera vez...")
             skip_graph = False  # forzar generación inicial
         else:
-            log_cb("♻️  Reutilizando grafo 3D existente (solo actualizando stats)...")
+            log_cb("[REBALANCE]  Reutilizando grafo 3D existente (solo actualizando stats)...")
     if not skip_graph:
-        log_cb("🔧 Generando visualización 3D base...")
+        log_cb("[TOOL] Generando visualización 3D base...")
         ok = generate_3d_html(csv_path, graph_html_path, my_pubkey, log_cb)
         if not ok:
             return False
 
     # 2. Leer estadísticas históricas
     if not skip_graph:
-        log_cb("📊 Leyendo node_history.db...")
+        log_cb("[CHART] Leyendo node_history.db...")
     stats = read_history_stats()
 
     # 3. Serializar stats como JSON
@@ -2027,6 +2033,6 @@ def generate_cockpit_html(csv_path: Path = None, cockpit_path: Path = None,
     cockpit_path.parent.mkdir(parents=True, exist_ok=True)
     cockpit_path.write_text(html, encoding="utf-8")
     if not skip_graph:
-        log_cb(f"✅ Cockpit guardado: {cockpit_path.name}")
+        log_cb(f"[OK] Cockpit guardado: {cockpit_path.name}")
     return True
 
