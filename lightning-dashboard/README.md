@@ -16,9 +16,16 @@ El dashboard funciona como un orquestador central que se comunica de manera así
 7. **❌ Cierre de Canales**: Interfaz unificada para gestionar cierres cooperativos o unilaterales (Force Close). Permite visualizar el estado de canales inactivos, pendientes o bloqueados en "WaitClose" y proceder con un clic.
 
 ## Ejecución y Set-up
-Asegúrate de que tus demonios LND estén listos en el background.
+Asegúrate de que tus demonios LND y Bitcoin estén listos en el background.
 
-Dependencias:
+**Configuración:**
+1. Copia el archivo de configuración de ejemplo que se encuentra en la raíz del repositorio:
+   ```bash
+   cp ../.env.example ../.env
+   ```
+2. Edita `../.env` para ajustar la red (`NETWORK`) y los binarios de ejecución si es necesario (`LNCLI_BIN`, `BITCOIN_CLI_BIN`).
+
+**Dependencias:**
 ```bash
 pip install -r requirements.txt
 ```

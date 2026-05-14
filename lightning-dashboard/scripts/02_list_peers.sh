@@ -21,6 +21,14 @@
 set -euo pipefail
 
 # ── Configuración ─────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DASHBOARD_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="$(dirname "$DASHBOARD_DIR")"
+
+if [ -f "$ROOT_DIR/.env" ]; then
+    source "$ROOT_DIR/.env"
+fi
+
 NETWORK="${NETWORK:-testnet4}"
 LNCLI_BIN="${LNCLI_BIN:-lncli-debug}"
 

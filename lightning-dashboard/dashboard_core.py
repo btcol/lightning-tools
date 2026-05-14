@@ -30,20 +30,42 @@ try:
 except ImportError:
     HAS_PLOTLY = False
 
-# =============================================================================
-# CONFIGURACIÓN GLOBAL
-# =============================================================================
-
-# Red y binario lncli (sobreescribibles via variables de entorno)
-NETWORK   = os.environ.get("NETWORK",   "testnet4")
-LNCLI_BIN = os.environ.get("LNCLI_BIN", "lncli-debug")
-
 # Rutas relativas al directorio del script
 BASE_DIR    = Path(__file__).parent.resolve()
 SCRIPTS_DIR = BASE_DIR / "scripts"
 DATA_DIR    = BASE_DIR / "data"
 EXPORTS_DIR  = BASE_DIR / "exports"
 BACKUPS_DIR  = BASE_DIR / "backups"
+
+# =============================================================================
+# CONFIGURACIÓN GLOBAL
+# =============================================================================
+
+def load_env_file(env_path):
+    if not env_path.exists():
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip().strip("'\"")
+                    if key and key not in os.environ:
+                        os.environ[key] = val
+    except Exception as e:
+        print(f"[WARN] No se pudo cargar {env_path}: {e}")
+
+# Intentar cargar .env desde la raíz del proyecto
+_ROOT_DIR = BASE_DIR.parent
+load_env_file(_ROOT_DIR / ".env")
+
+# Red y binario lncli (sobreescribibles via variables de entorno)
+NETWORK   = os.environ.get("NETWORK",   "testnet4")
+LNCLI_BIN = os.environ.get("LNCLI_BIN", "lncli-debug")
 
 # Archivo CSV generado por 01_scan_network.sh
 CSV_FILE  = DATA_DIR / "lightning_network.csv"
@@ -1024,7 +1046,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     if my_idx is not None:
         mx,my_,mz = node_x[my_idx],node_y[my_idx],node_z[my_idx]
         fig.add_trace(go.Scatter3d(
-            x=[mx],y=[my_],z=[mz],mode="markers",name="[*] Mi nodo",
+            x=[mx],y=[my_],z=[mz],mode="markers",name="⭐ Mi nodo",
             marker=dict(size=max(14,node_sizes[my_idx]*1.4),color="#FFD700",
                         opacity=1.0,symbol="diamond",line=dict(width=2,color="white")),
             hovertext=[node_text[my_idx]],hoverinfo="text"))
@@ -1037,7 +1059,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     fig.update_layout(
-        title=dict(text=f"<b>LN Red Lightning — Visualización 3D</b><br>"
+        title=dict(text=f"<b>⚡ Red Lightning — Visualización 3D</b><br>"
                         f"<sub>{G.number_of_nodes()} nodos · {len(edges)} canales · {now_str}</sub>",
                    x=0.5,xanchor="center",font=dict(size=18,color="white")),
         scene=dict(
@@ -1087,14 +1109,14 @@ def generate_3d_html(csv_path: Path, html_path: Path,
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:6px;align-items:center;';
   const input = document.createElement('input');
-  input.type='text'; input.placeholder='[SEARCH] alias o pubkey...';
+  input.type='text'; input.placeholder='🔍 alias o pubkey...';
   input.style.cssText=`background:rgba(10,10,30,0.92);border:1px solid rgba(0,220,255,0.55);
     border-radius:6px;color:#00dcff;font-size:13px;padding:6px 10px;width:220px;outline:none;
     box-shadow:0 0 8px rgba(0,220,255,0.25);`;
   const btn = document.createElement('button'); btn.textContent='Buscar';
   btn.style.cssText=`background:rgba(0,180,255,0.18);border:1px solid rgba(0,220,255,0.55);
     border-radius:6px;color:#00dcff;font-size:13px;padding:6px 12px;cursor:pointer;`;
-  const clearBtn = document.createElement('button'); clearBtn.textContent='[X]';
+  const clearBtn = document.createElement('button'); clearBtn.textContent='✕';
   clearBtn.style.cssText=`background:rgba(255,60,60,0.15);border:1px solid rgba(255,100,100,0.5);
     border-radius:6px;color:#ff6666;font-size:13px;padding:6px 10px;cursor:pointer;`;
   const status = document.createElement('div');
@@ -1112,9 +1134,9 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     border-radius:8px;padding:12px;color:#ddd;box-shadow:0 8px 16px rgba(0,0,0,0.6);`;
   
   leg.innerHTML = `
-    <div style="font-weight:bold;color:#fff;margin-bottom:4px;font-size:13px;">[INFO] Leyenda de Nodos</div>
-    <div><span style="font-size:14px;">(*)</span> <b>Tamaño:</b> Proporcional al Nº de canales</div>
-    <div><span style="font-size:14px;">[UI]</span> <b>Color:</b> Último chisme (gossip)</div>
+    <div style="font-weight:bold;color:#fff;margin-bottom:4px;font-size:13px;">ℹ️ Leyenda de Nodos</div>
+    <div><span style="font-size:14px;">◉</span> <b>Tamaño:</b> Proporcional al Nº de canales</div>
+    <div><span style="font-size:14px;">🎨</span> <b>Color:</b> Último chisme (gossip)</div>
     <div style="display:flex;align-items:center;margin-top:4px;">
       <span style="background:#50e664;width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;"></span> Reciente (< 30 días)
     </div>
@@ -1123,11 +1145,11 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     </div>
     <hr style="border:0;border-top:1px solid rgba(255,255,255,0.2);margin:8px 0;width:100%;">
     <div style="display:flex;align-items:center;justify-content:space-between;">
-      <label for="camSpeed" style="cursor:pointer;font-weight:bold;color:#00ffed;">O Auto-Giro:</label>
+      <label for="camSpeed" style="cursor:pointer;font-weight:bold;color:#00ffed;">↻ Auto-Giro:</label>
       <input type="range" id="camSpeed" min="0" max="50" value="6" style="width:80px;cursor:pointer;">
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;">
-      <label for="autoReload" style="cursor:pointer;font-weight:bold;color:#ffcc00;">[LOOP] Auto-Refresco:</label>
+      <label for="autoReload" style="cursor:pointer;font-weight:bold;color:#ffcc00;">🔁 Auto-Refresco:</label>
       <div style="display:flex;align-items:center;gap:5px;">
         <input type="checkbox" id="autoReload" style="cursor:pointer;">
         <input type="number" id="reloadSecs" value="30" min="5" style="width:35px;background:#000;color:#ffcc00;border:1px solid #ffcc00;font-size:10px;text-align:center;">
@@ -1163,7 +1185,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     if(!found) for(const [k,v] of Object.entries(NODE_LOOKUP))
       if(k.toLowerCase().includes(ql)&&v.alias){{found=v;break;}}
     removeSearchTrace();
-    if(!found){{status.textContent='[!] Nodo no encontrado.';status.style.color='#ff8888';
+    if(!found){{status.textContent='⚠ Nodo no encontrado.';status.style.color='#ff8888';
       status.style.display='block';return;}}
     const days_s=found.days<9999?found.days+' días':'desc.';
     const cap_s=found.cap?found.cap.toLocaleString()+' sats':'?';
@@ -1209,7 +1231,7 @@ def generate_3d_html(csv_path: Path, html_path: Path,
     }}
 
     const newTrace = {{type:'scatter3d',x:[found.x],y:[found.y],z:[found.z],
-      mode:'markers',name:'[SEARCH] Encontrado',
+      mode:'markers',name:'🔍 Encontrado',
       marker:{{size:18,color:'#00ffed',opacity:1.0,symbol:'diamond',
                line:{{width:2,color:'white'}}}},
       hovertext:['<b>'+found.alias+'</b><br>Pubkey:'+found.pk.slice(0,20)+'...<br>'+
@@ -1220,13 +1242,13 @@ def generate_3d_html(csv_path: Path, html_path: Path,
       const len = gd.data.length; searchTraceIdx = len - 1; focusTraceIndices = [len - 3, len - 2];
     }});
     const cur=gd.layout.scene.annotations||[];
-    const cleaned=cur.filter(a=>!a.text.startsWith('<b>[SEARCH]'));
+    const cleaned=cur.filter(a=>!a.text.startsWith('<b>🔍'));
     Plotly.relayout(gd,{{'scene.annotations':[...cleaned,{{x:found.x,y:found.y,z:found.z,
-      text:'<b>[SEARCH] '+found.alias+'</b>',showarrow:true,arrowhead:2,
+      text:'<b>🔍 '+found.alias+'</b>',showarrow:true,arrowhead:2,
       arrowcolor:'#00ffed',ax:-70,ay:55,
       font:{{size:12,color:'#00ffed'}},bgcolor:'rgba(0,30,30,0.8)',
       bordercolor:'#00ffed',borderwidth:1}}]}});
-    status.innerHTML='[OK] <b>'+found.alias+'</b> | ch:'+found.ch+' | cap:'+cap_s;
+    status.innerHTML='✅ <b>'+found.alias+'</b> | ch:'+found.ch+' | cap:'+cap_s;
     status.style.color='#aaffee'; status.style.display='block';
   }}
   function doClear() {{
@@ -1534,14 +1556,14 @@ COCKPIT_HTML = """<!DOCTYPE html>
 
   <!-- TOP BAR -->
   <div id="hud-top" class="hud-panel">
-    <div class="logo">LN LN·COCKPIT</div>
+    <div class="logo">⚡ LN·COCKPIT</div>
     <div class="top-seg tip" data-tip="Alias del nodo anunciado al grafo Lightning.
 Debe coincidir con lnd.conf.">
       <span class="lbl">Nodo</span>
       <span class="val" id="t-alias">—</span>
     </div>
-    <div class="top-seg tip" data-tip="[ON] OK = sincronizado y operativo.
-[OFF] NO = offline o atrasado.
+    <div class="top-seg tip" data-tip="🟢 OK = sincronizado y operativo.
+🔴 NO = offline o atrasado.
 Ningún pago se enruta si NO está sincronizado.">
       <span class="lbl">Sync</span>
       <span class="val" id="t-sync"><span id="sync-dot"></span><span id="sync-txt">—</span></span>
@@ -1588,7 +1610,7 @@ Demasiado on-chain = capital sin trabajar.">
     <div class="card tip" data-tip="Ideal: ≥80% de canales activos.
 Inactivos = peer desconectado.
 Si persiste &gt;24h, considera cerrar el canal.">
-      <div class="card-title">[NET] Canales</div>
+      <div class="card-title">📡 Canales</div>
       <div class="card-val" id="l-ch-active">—</div>
       <div class="card-sub">activos / <span id="l-ch-total">—</span> total</div>
       <div class="bar-meter" style="margin-top:6px;">
@@ -1600,7 +1622,7 @@ Si persiste &gt;24h, considera cerrar el canal.">
 &lt;20% = sin liquidez saliente (no puedes enviar).
 &gt;80% = sin liquidez entrante (no puedes recibir).
 Equilibrio = más enrutamiento posible.">
-      <div class="card-title">[LIQ] Liquidez Local</div>
+      <div class="card-title">💧 Liquidez Local</div>
       <div class="gauge-wrap">
         <svg width="110" height="70" viewBox="0 0 110 70">
           <path d="M5,60 A50,50 0 0,1 105,60" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10" stroke-linecap="round"/>
@@ -1616,7 +1638,7 @@ Equilibrio = más enrutamiento posible.">
 A mayor capacidad, más atractivo como hub.
 Mainnet: nodos relevantes &gt;10M sats.
 Capital en on-chain = capital sin trabajar.">
-      <div class="card-title">LN Capacidad Total</div>
+      <div class="card-title">⚡ Capacidad Total</div>
       <div class="card-val" style="font-size:21px;" id="l-capacity">—</div>
       <div class="card-sub">sats en canales</div>
     </div>
@@ -1625,7 +1647,7 @@ Capital en on-chain = capital sin trabajar.">
 Canal activo sin actualizaciones en &gt;7 días.
 Capital inmovilizado e improductivo.
 Considera cerrar zombies persistentes.">
-      <div class="card-title">[ZOMBIE] Zombies</div>
+      <div class="card-title">🧟 Zombies</div>
       <div class="card-val" id="l-zombies">—</div>
       <div class="card-sub" id="l-zombie-cap">— sats inactivos</div>
     </div>
@@ -1645,7 +1667,7 @@ Considera cerrar zombies persistentes.">
 Tendencia creciente = nodo utilizado como hub.
 Mainnet: buenos nodos ganan 100k+ msat/mes.
 Testnet4: cifras bajas son normales.">
-      <div class="card-title">[UP] Fees Ganadas (cum.)</div>
+      <div class="card-title">📈 Fees Ganadas (cum.)</div>
       <div class="card-val green" id="r-fees-earned">—</div>
       <div class="card-sub">msat enrutamiento</div>
     </div>
@@ -1654,7 +1676,7 @@ Testnet4: cifras bajas son normales.">
 Debe ser MENOR que las fees ganadas.
 Si supera lo ganado, estás subsidiando la red.
 Revisa frecuencia y costo de rebalanceos.">
-      <div class="card-title">[DOWN] Fees Pagadas (cum.)</div>
+      <div class="card-title">📉 Fees Pagadas (cum.)</div>
       <div class="card-val amber" id="r-fees-paid">—</div>
       <div class="card-sub">msat rebalanceos</div>
     </div>
@@ -1663,7 +1685,7 @@ Revisa frecuencia y costo de rebalanceos.">
 Vol: sats totales que pasaron por ti.
 Más forwards = mejor posición en la red.
 Forwards grandes = pagos relevantes enrutados.">
-      <div class="card-title">LN Forwards (cum.)</div>
+      <div class="card-title">⚡ Forwards (cum.)</div>
       <div class="card-val" id="r-fwd-count">—</div>
       <div class="card-sub">Vol: <span id="r-fwd-vol">—</span> sats</div>
     </div>
@@ -1672,7 +1694,7 @@ Forwards grandes = pagos relevantes enrutados.">
 &lt;50% Excelente — nodo muy rentable.
 50–100% Aceptable — margen mejorable.
 &gt;100% Pérdida — rebalanceos demasiado caros.">
-      <div class="card-title">[BALANCE] Ratio Rebalan/Enrut.</div>
+      <div class="card-title">⚖️ Ratio Rebalan/Enrut.</div>
       <div class="card-val" id="r-ratio">—</div>
       <div class="card-sub">fees_paid / fees_earned</div>
     </div>
@@ -1681,7 +1703,7 @@ Forwards grandes = pagos relevantes enrutados.">
 Cuánto de tu capital está 'trabajando'.
 Mainnet: &gt;1% mensual es aceptable.
 Si es 0% en mainnet: revisar fees y conectividad.">
-      <div class="card-title">[TARGET] Efic. Capital</div>
+      <div class="card-title">🎯 Efic. Capital</div>
       <div class="card-val" id="r-efficiency">—</div>
       <div class="card-sub">sats_enrutados / capacidad</div>
     </div>
@@ -1693,7 +1715,7 @@ Si es 0% en mainnet: revisar fees y conectividad.">
     <div class="spark-wrap tip" data-tip="Barras diarias: verde=ganadas, amarillo=pagadas.
 Barras verdes más altas = nodo rentable ese día.
 Días vacíos = sin actividad de enrutamiento.">
-      <div class="spark-title">[CHART] Fees Ganadas vs Pagadas — 7 días</div>
+      <div class="spark-title">📊 Fees Ganadas vs Pagadas — 7 días</div>
       <svg id="spark-daily" viewBox="0 0 300 55" preserveAspectRatio="none">
         <text x="150" y="30" fill="rgba(136,136,170,.5)" text-anchor="middle" font-size="10" font-family="monospace">Sin datos</text>
       </svg>
@@ -1703,7 +1725,7 @@ Días vacíos = sin actividad de enrutamiento.">
 Picos = alta actividad de enrutamiento.
 Plano en 0 = sin tráfico (normal en testnet4).
 Tendencia creciente = ganando relevancia en la red.">
-      <div class="spark-title">LN Forwards por hora — 24h</div>
+      <div class="spark-title">⚡ Forwards por hora — 24h</div>
       <svg id="spark-hourly" viewBox="0 0 300 55" preserveAspectRatio="none">
         <text x="150" y="30" fill="rgba(136,136,170,.5)" text-anchor="middle" font-size="10" font-family="monospace">Sin datos</text>
       </svg>
@@ -1713,7 +1735,7 @@ Tendencia creciente = ganando relevancia en la red.">
 + Verde = nodo rentable.
 - Rojo = gastas más en rebalanceos de lo que ganas.
 Objetivo: siempre positivo.">
-      <div class="bot-label">[$] Net Profit 7d</div>
+      <div class="bot-label">💰 Net Profit 7d</div>
       <div class="bot-val" style="font-size:26px;" id="b-net-profit">—</div>
       <div class="card-sub" id="b-net-sub">fees_earned - fees_paid</div>
     </div>
@@ -1721,7 +1743,7 @@ Objetivo: siempre positivo.">
     <div class="bot-seg tip" data-tip="Timestamp del último registro en node_history.db.
 Debe ser reciente (min = intervalo configurado).
 Muy desactualizado = colector no está corriendo.">
-      <div class="bot-label">[TIME] Último Snapshot</div>
+      <div class="bot-label">🕒 Último Snapshot</div>
       <div class="bot-val" style="font-size:16px;" id="b-snap-ts">—</div>
       <div class="card-sub">Datos en tiempo real</div>
     </div>
@@ -1813,7 +1835,7 @@ Muy desactualizado = colector no está corriendo.">
   $('l-zombie-cap').textContent = fmtSat(snap.inactive_capital_sat || 0) + ' sats inactivos';
 
   if (S.zombies_list && S.zombies_list.length > 0) {
-    let zTip = "[ZOMBIE] ZOMBIES DETECTADOS:\\n";
+    let zTip = "🧟 ZOMBIES DETECTADOS:\\n";
     S.zombies_list.forEach(zb => {
       const alias = zb.peer_alias || 'Desconocido';
       zTip += `- ${alias} (${fmtSat(zb.capacity)} sats)\\n`;

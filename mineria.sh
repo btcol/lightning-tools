@@ -11,9 +11,19 @@ echo "========================================"
 echo "Iniciando Minero Testnet4 (LND Target)"
 echo "========================================"
 
+# ── Cargar variables de entorno ──
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    source "$SCRIPT_DIR/.env"
+fi
+
+NETWORK="${NETWORK:-testnet4}"
+LNCLI_BIN="${LNCLI_BIN:-lncli-debug}"
+BITCOIN_CLI_BIN="${BITCOIN_CLI_BIN:-bitcoin-cli}"
+
 # Genera una nueva direccion p2tr (Taproot) para LND. Si prefieres Segwit, puedes cambiar a p2wkh.
 echo "[*] Generando direccion destino en LND..."
-ADDRESS=$(lncli-debug --network=testnet4 newaddress p2tr | jq -r '.address')
+ADDRESS=$(${LNCLI_BIN} --network=${NETWORK} newaddress p2tr | jq -r '.address')
 
 if [ -z "$ADDRESS" ] || [ "$ADDRESS" == "null" ]; then
     echo "[!] Error al generar la direccion con lncli. Asegurate de que LND este corriendo y desbloqueado."
@@ -31,11 +41,11 @@ while true; do
     INTENTOS=$((INTENTOS+1))
     
     # Consultar el tiempo del último bloque de la red global y calcular el promedio
-    BEST_HASH=$(bitcoin-cli -testnet4 getbestblockhash 2>/dev/null)
+    BEST_HASH=$(${BITCOIN_CLI_BIN} -${NETWORK} getbestblockhash 2>/dev/null)
     if [ -n "$BEST_HASH" ] && [ "$BEST_HASH" != "$LAST_KNOWN_BEST_HASH" ]; then
         LAST_KNOWN_BEST_HASH="$BEST_HASH"
         
-        BLOCK_INFO=$(bitcoin-cli -testnet4 getblockheader "$BEST_HASH" 2>/dev/null)
+        BLOCK_INFO=$(${BITCOIN_CLI_BIN} -${NETWORK} getblockheader "$BEST_HASH" 2>/dev/null)
         LAST_TIME_EPOCH=$(echo "$BLOCK_INFO" | jq -r '.time' 2>/dev/null)
         HEIGHT=$(echo "$BLOCK_INFO" | jq -r '.height' 2>/dev/null)
         
@@ -44,9 +54,9 @@ while true; do
             
             # Calcular el promedio de tiempo de los ultimos 5 bloques
             if [ -n "$HEIGHT" ] && [ "$HEIGHT" -ge 5 ]; then
-                HASH_5_AGO=$(bitcoin-cli -testnet4 getblockhash $((HEIGHT - 5)) 2>/dev/null)
+                HASH_5_AGO=$(${BITCOIN_CLI_BIN} -${NETWORK} getblockhash $((HEIGHT - 5)) 2>/dev/null)
                 if [ -n "$HASH_5_AGO" ]; then
-                    TIME_5_AGO=$(bitcoin-cli -testnet4 getblockheader "$HASH_5_AGO" 2>/dev/null | jq -r '.time' 2>/dev/null)
+                    TIME_5_AGO=$(${BITCOIN_CLI_BIN} -${NETWORK} getblockheader "$HASH_5_AGO" 2>/dev/null | jq -r '.time' 2>/dev/null)
                     if [ -n "$TIME_5_AGO" ] && [ "$TIME_5_AGO" != "null" ]; then
                         DIFF_SEC=$((LAST_TIME_EPOCH - TIME_5_AGO))
                         # Calcular promedio en segundos
@@ -68,7 +78,7 @@ while true; do
     # Imprime el estado actual sobre la misma linea
     printf "\r[*] Intento #%d minando... %s " "$INTENTOS" "$INFO_GLOBAL"
     
-    OUTPUT=$(bitcoin-cli -testnet4 generatetoaddress 1 "$ADDRESS" 2>&1)
+    OUTPUT=$(${BITCOIN_CLI_BIN} -${NETWORK} generatetoaddress 1 "$ADDRESS" 2>&1)
     EXIT_CODE=$?
     
     if [ $EXIT_CODE -eq 0 ]; then

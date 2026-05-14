@@ -25,11 +25,17 @@
 set -euo pipefail
 
 # ── Configuración ─────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DASHBOARD_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="$(dirname "$DASHBOARD_DIR")"
+
+if [ -f "$ROOT_DIR/.env" ]; then
+    source "$ROOT_DIR/.env"
+fi
+
 NETWORK="${NETWORK:-testnet4}"
 LNCLI_BIN="${LNCLI_BIN:-lncli-debug}"
 # CSV_OUT apunta a ../data/ relativo al directorio lightning-dashboard
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DASHBOARD_DIR="$(dirname "$SCRIPT_DIR")"
 CSV_OUT="${CSV_OUT:-${DASHBOARD_DIR}/data/lightning_network.csv}"
 export CSV_OUT
 NOW=$(date +%s)   # timestamp actual en segundos (para calcular "hace N días")

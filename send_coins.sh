@@ -9,33 +9,43 @@
 # Dependencias: bitcoin-cli, lncli-debug, jq
 # =============================================================================
 
-bitcoin-cli -testnet4 loadwallet "bitcoin-onchain"
+# ── Cargar variables de entorno ──
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    source "$SCRIPT_DIR/.env"
+fi
 
-bitcoin-cli -testnet4 -rpcwallet="bitcoin-onchain" listunspent
+NETWORK="${NETWORK:-testnet4}"
+LNCLI_BIN="${LNCLI_BIN:-lncli-debug}"
+BITCOIN_CLI_BIN="${BITCOIN_CLI_BIN:-bitcoin-cli}"
+
+${BITCOIN_CLI_BIN} -${NETWORK} loadwallet "bitcoin-onchain"
+
+${BITCOIN_CLI_BIN} -${NETWORK} -rpcwallet="bitcoin-onchain" listunspent
 
 # Consolidacion de todos los utxos
-inputs=$(bitcoin-cli -testnet4 -rpcwallet="bitcoin-onchain" listunspent | jq -c 'map({txid: .txid, vout: .vout})')
+inputs=$(${BITCOIN_CLI_BIN} -${NETWORK} -rpcwallet="bitcoin-onchain" listunspent | jq -c 'map({txid: .txid, vout: .vout})')
 
 echo "Inputs: $inputs"
 
 # Genera una direccion de cambio para bitcoin-onchain
-changeaddress=$(bitcoin-cli -testnet4 -rpcwallet="bitcoin-onchain" -named getnewaddress label="Cambio")
+changeaddress=$(${BITCOIN_CLI_BIN} -${NETWORK} -rpcwallet="bitcoin-onchain" -named getnewaddress label="Cambio")
 echo "Direccion de cambio: $changeaddress"
 
 # Genera una direccion para la wallet lightning-onchain
-addres_lightning=$(lncli-debug --network=testnet4 newaddress p2wkh | jq -r '.address')
+addres_lightning=$(${LNCLI_BIN} --network=${NETWORK} newaddress p2wkh | jq -r '.address')
 echo "Direccion lightning: $addres_lightning"
 
 # Crear la transaccion activando el replace-by-fee (RBF)
-rawtxhex=$(bitcoin-cli -testnet4 -named createrawtransaction inputs="$inputs" outputs='''{"'$addres_lightning'": 0.0035, "'$changeaddress'": 0.00038176}''')
+rawtxhex=$(${BITCOIN_CLI_BIN} -${NETWORK} -named createrawtransaction inputs="$inputs" outputs='''{"'$addres_lightning'": 0.0035, "'$changeaddress'": 0.00038176}''')
 
 echo "Transaccion raw: $rawtxhex"
 
 # Firmamos la transaccion
-signedtxhex=$(bitcoin-cli -testnet4 -rpcwallet="bitcoin-onchain" -named signrawtransactionwithwallet hexstring=$rawtxhex | jq -r '.hex')
+signedtxhex=$(${BITCOIN_CLI_BIN} -${NETWORK} -rpcwallet="bitcoin-onchain" -named signrawtransactionwithwallet hexstring=$rawtxhex | jq -r '.hex')
 echo "Transaccion firmada: $signedtxhex"
 
 # Transmitimos la transaccion
-transactionid=$(bitcoin-cli -testnet4 -named sendrawtransaction hexstring=$signedtxhex)
+transactionid=$(${BITCOIN_CLI_BIN} -${NETWORK} -named sendrawtransaction hexstring=$signedtxhex)
 echo "Transaccion transmitida: $transactionid"
 

@@ -11,7 +11,15 @@ Multiples herramientas para administrar de forma mas amigable los nodos en Light
 
 Este directorio contiene herramientas primarias de CLI (línea de comandos) para gestionar un nodo Lightning LND operando en `testnet4`. Incluye rutinas para inicialización rápida, generación gráfica 3D del estado de la red y scripts base para rebalanceo circular de canales.
 
-Ajusta las variables de entorno segun tu sistema operativo, las pruebas se han realizado en la red testnet4 pero sirve para cualquier red, segun la necesidad, solo configure correctamente las variables de entorno que se encuentran al inicio de cada script.
+## Configuración Universal (.env)
+
+Ajusta las variables de entorno según tu sistema operativo. El repositorio incluye un sistema centralizado mediante un archivo `.env`.
+Antes de usar los scripts o el dashboard, copia el archivo de ejemplo y edítalo si usas una red diferente (como `mainnet` o `signet`) o si el nombre de tus binarios difiere:
+
+```bash
+cp .env.example .env
+```
+Todos los scripts (Bash y Python) tomarán de ahí las variables `NETWORK`, `LNCLI_BIN` y `BITCOIN_CLI_BIN`.
 
 ## Funcionamiento del Software
 El conjunto de utilidades funciona interactuando directamente con la interfaz de línea de comandos (CLI) de `lnd` (`lncli`) y `bitcoind`. Los scripts bash se encargaban de la comunicación de bajo nivel para administrar operaciones diarias (consultas de peers, pagos on-chain, generación de facturas). Paralelamente, los scripts de Python asumian las tareas computacionalmente pesadas: procesaban el grafo público de canales mediante algoritmos de búsqueda, filtraban topologías complejas y estructuran los datos para generar representaciones visuales interactivas en 3D de la Lightning Network de manera local sin depender de servidores externos.

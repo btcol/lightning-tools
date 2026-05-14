@@ -23,6 +23,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASHBOARD_DIR="$(dirname "$SCRIPT_DIR")"
 COLLECTOR="$SCRIPT_DIR/collect_stats.py"
+ROOT_DIR="$(dirname "$DASHBOARD_DIR")"
+
+if [ -f "$ROOT_DIR/.env" ]; then
+    source "$ROOT_DIR/.env"
+fi
 
 # ── Configuración ─────────────────────────────────────────────────────────────
 export NETWORK="${NETWORK:-testnet4}"

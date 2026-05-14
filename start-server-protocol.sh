@@ -3,29 +3,39 @@
 
 ############################3
 
+# ── Cargar variables de entorno ──
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    source "$SCRIPT_DIR/.env"
+fi
+
+NETWORK="${NETWORK:-testnet4}"
+LNCLI_BIN="${LNCLI_BIN:-lncli-debug}"
+BITCOIN_CLI_BIN="${BITCOIN_CLI_BIN:-bitcoin-cli}"
+
 # Inicializa el nodo de bitcoin
 echo "Inicializando bitcoind ..."
-screen -dmS bitcoind bash -c 'bitcoind -testnet4; exec bash'
+screen -dmS bitcoind bash -c "bitcoind -${NETWORK}; exec bash"
 
 echo "Esperando a que bitcoind se sincronice al 100%..."
-while ! bitcoin-cli -testnet4 getblockchaininfo 2>/dev/null | grep -q '"initialblockdownload": false'; do
+while ! ${BITCOIN_CLI_BIN} -${NETWORK} getblockchaininfo 2>/dev/null | grep -q '"initialblockdownload": false'; do
     sleep 5
 done
 sleep 2
 
 echo "Inicializando lnd ..."
-screen -dmS lnd bash -c 'lnd --bitcoin.testnet4; exec bash'
+screen -dmS lnd bash -c "lnd --bitcoin.${NETWORK}; exec bash"
 
 # Esperar a que lnd se inicie
 echo "Esperando a que LND abra el puerto RPC..."
-while lncli --network=testnet4 state 2>&1 | grep -q "connection refused"; do
+while ${LNCLI_BIN} --network=${NETWORK} state 2>&1 | grep -q "connection refused"; do
     sleep 3
 done
 sleep 2 # Margen de seguridad extra
 
 # Desbloquear la wallet existente
 echo "Desbloqueando la wallet existente ..."
-echo "BNtycvoplñ1" | ~/go/bin/lncli --network=testnet4 unlock --stdin
+echo "BNtycvoplñ1" | ${LNCLI_BIN} --network=${NETWORK} unlock --stdin
 
 
 # Inicializa el servicio LNbits
