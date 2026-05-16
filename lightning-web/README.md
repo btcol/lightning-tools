@@ -54,7 +54,7 @@ El proyecto es 100% autónomo. Los datos (base SQLite, exportaciones HTML y back
 
 ## Apoya el Proyecto
 
-Si estas herramientas de código abierto te han sido de utilidad y quieres ayudar a que el proyecto siga creciendo, ¡tu apoyo es muy bienvenido! El desarrollador principal (actualmente desempleado) te lo agradecerá inmensamente, lo que le permitirá continuar dedicando tiempo a crear y mantener estas y más herramientas para la comunidad.
+Si estas herramientas de código abierto te han sido de utilidad y quieres ayudar a que el proyecto siga creciendo, ¡tu apoyo es muy bienvenido! El desarrollador principal te lo agradecerá inmensamente, lo que le permitirá continuar dedicando tiempo a crear y mantener estas y más herramientas para la comunidad.
 
 <img src="images/btcol_invoice.svg" width="200" alt="QR de Donación Lightning">
 
