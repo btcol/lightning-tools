@@ -166,6 +166,23 @@ CREATE TABLE IF NOT EXISTS hourly_stats (
 CREATE INDEX IF NOT EXISTS idx_snap_ts      ON snapshots(ts);
 CREATE INDEX IF NOT EXISTS idx_chansnap_sid ON channel_snapshots(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_chansnap_cid ON channel_snapshots(chan_id);
+
+-- Logros/trofeos desbloqueables del sistema de gamificacion
+CREATE TABLE IF NOT EXISTS achievements (
+    id          TEXT    PRIMARY KEY,  -- identificador unico del logro (ej. 'primera_sangre')
+    name        TEXT    NOT NULL,     -- nombre legible del logro
+    description TEXT    DEFAULT '',   -- descripcion de como se obtiene
+    emoji       TEXT    DEFAULT '🏆', -- icono visual
+    unlocked_at INTEGER DEFAULT NULL, -- timestamp cuando se desbloqueo (NULL = bloqueado)
+    snapshot_id INTEGER DEFAULT NULL  -- snapshot que detonó el desbloqueo
+);
+
+-- Records personales: maximos historicos de metricas clave
+CREATE TABLE IF NOT EXISTS records (
+    key        TEXT PRIMARY KEY,  -- nombre del record (ej. 'max_single_forward_sat')
+    value      REAL DEFAULT 0,    -- valor numerico del record
+    achieved_at INTEGER DEFAULT 0 -- timestamp cuando se registro
+);
 """
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
@@ -306,6 +323,147 @@ def cleanup(conn):
     # hourly_stats: conservar últimas MAX_HOURLY_HOURS horas
     cutoff_hour = ((now_ts() // 3600) - MAX_HOURLY_HOURS) * 3600
     conn.execute("DELETE FROM hourly_stats WHERE hour_ts < ?", (cutoff_hour,))
+
+
+# Definicion estatica de todos los logros del sistema de gamificacion
+ALL_ACHIEVEMENTS = [
+    {
+        "id": "primera_sangre",
+        "name": "Primera Sangre",
+        "description": "Enrutaste tu primera transaccion por el nodo.",
+        "emoji": "⚡",
+    },
+    {
+        "id": "rayo_dorado",
+        "name": "Rayo Dorado",
+        "description": "Todos tus canales activos tienen un ratio entre 40% y 60% (balanceados).",
+        "emoji": "🌟",
+    },
+    {
+        "id": "manos_de_diamante",
+        "name": "Manos de Diamante",
+        "description": "Acumulaste 100,000 sats en comisiones de enrutamiento.",
+        "emoji": "💎",
+    },
+    {
+        "id": "insomne",
+        "name": "Insomne",
+        "description": "Tu nodo mantuvo 100% de uptime (synced) en los ultimos 7 dias.",
+        "emoji": "🌙",
+    },
+    {
+        "id": "cazador_zombies",
+        "name": "Cazador de Zombies",
+        "description": "Detectaste y eliminaste un canal zombie (inactivo).",
+        "emoji": "🧟",
+    },
+    {
+        "id": "enrutador_activo",
+        "name": "Enrutador Activo",
+        "description": "Ruteaste mas de 100 transacciones en total.",
+        "emoji": "🔀",
+    },
+    {
+        "id": "hub_de_la_red",
+        "name": "Hub de la Red",
+        "description": "Tu nodo tiene 5 o mas canales activos simultaneamente.",
+        "emoji": "🕸️",
+    },
+    {
+        "id": "ahorrador",
+        "name": "El Ahorrador",
+        "description": "Tu ganancia neta acumulada supera los 50,000 sats.",
+        "emoji": "💰",
+    },
+]
+
+
+def seed_achievements(conn):
+    # Inserta los logros que no existan aun (sin sobreescribir los desbloqueados)
+    for ach in ALL_ACHIEVEMENTS:
+        conn.execute(
+            "INSERT OR IGNORE INTO achievements (id, name, description, emoji) VALUES (?,?,?,?)",
+            (ach["id"], ach["name"], ach["description"], ach["emoji"])
+        )
+
+
+def unlock_achievement(conn, ach_id, snap_id, ts):
+    # Desbloquea un logro solo si no estaba desbloqueado antes
+    conn.execute(
+        "UPDATE achievements SET unlocked_at=?, snapshot_id=? WHERE id=? AND unlocked_at IS NULL",
+        (ts, snap_id, ach_id)
+    )
+
+
+def update_record(conn, key, value, ts):
+    # Actualiza un record si el nuevo valor supera al anterior
+    existing = conn.execute("SELECT value FROM records WHERE key=?", (key,)).fetchone()
+    if existing is None or value > existing[0]:
+        conn.execute(
+            "INSERT OR REPLACE INTO records (key, value, achieved_at) VALUES (?,?,?)",
+            (key, value, ts)
+        )
+        return True  # nuevo record!
+    return False
+
+
+def evaluate_achievements(conn, snap, snap_id, ts, fwd_count_cum, fwd_fees_cum_msat,
+                          zombie_count, chan_rows, daily_7d):
+    # Evalua el estado del juego en el snapshot actual y desbloquea logros si se cumplen condiciones
+    seed_achievements(conn)
+
+    # ── Logro: Primera Sangre ── al menos 1 forward registrado en toda la historia
+    if fwd_count_cum >= 1:
+        unlock_achievement(conn, "primera_sangre", snap_id, ts)
+
+    # ── Logro: Rayo Dorado ── todos los canales activos tienen ratio entre 40-60%
+    active_chans = [c for c in chan_rows if c["active"] == 1]
+    if active_chans and all(40.0 <= c["local_ratio"] <= 60.0 for c in active_chans):
+        unlock_achievement(conn, "rayo_dorado", snap_id, ts)
+
+    # ── Logro: Manos de Diamante ── 100,000+ sats en fees ganadas (cum en msat)
+    if fwd_fees_cum_msat >= 100_000 * 1000:  # 100k sats en msat
+        unlock_achievement(conn, "manos_de_diamante", snap_id, ts)
+
+    # ── Logro: Insomne ── 100% uptime en ultimos 7 dias (ningun dia con disconnections)
+    if len(daily_7d) >= 7 and all(d.get("disconnections", 1) == 0 for d in daily_7d):
+        unlock_achievement(conn, "insomne", snap_id, ts)
+
+    # ── Logro: Cazador de Zombies ── actualmente no hay zombies (limpiaste la casa)
+    # Se desbloquea si alguna vez hubo zombies y ahora no hay ninguno
+    had_zombies = conn.execute(
+        "SELECT COUNT(*) FROM snapshots WHERE zombie_channels > 0"
+    ).fetchone()[0]
+    if had_zombies > 0 and zombie_count == 0:
+        unlock_achievement(conn, "cazador_zombies", snap_id, ts)
+
+    # ── Logro: Enrutador Activo ── 100+ forwards en total
+    if fwd_count_cum >= 100:
+        unlock_achievement(conn, "enrutador_activo", snap_id, ts)
+
+    # ── Logro: Hub de la Red ── 5+ canales activos
+    if snap.get("channels_active", 0) >= 5:
+        unlock_achievement(conn, "hub_de_la_red", snap_id, ts)
+
+    # ── Logro: El Ahorrador ── ganancia neta acumulada > 50,000 sats
+    net_7d_msat = sum(d.get("net_profit_msat", 0) for d in daily_7d)
+    total_net = conn.execute(
+        "SELECT SUM(net_profit_msat) FROM daily_stats"
+    ).fetchone()[0] or 0
+    if total_net >= 50_000 * 1000:  # 50k sats en msat
+        unlock_achievement(conn, "ahorrador", snap_id, ts)
+
+    # ── Records personales ──
+    # Mayor forward unico del dia
+    fwd_today = sum(d.get("fwd_amt_delta_sat", 0) for d in daily_7d[-1:]) if daily_7d else 0
+    update_record(conn, "max_daily_fwd_sat", fwd_today, ts)
+    # Mayor cantidad de fees ganadas en un dia
+    fees_today = sum(d.get("fees_earned_msat", 0) for d in daily_7d[-1:]) if daily_7d else 0
+    update_record(conn, "max_daily_fees_msat", fees_today, ts)
+    # Maxima capacidad total
+    update_record(conn, "max_capacity_sat", snap.get("capacity_total", 0), ts)
+    # Maximo de canales activos simultaneos
+    update_record(conn, "max_active_channels", snap.get("channels_active", 0), ts)
 
 # ── Recolección principal ──────────────────────────────────────────────────────
 def collect():
@@ -501,6 +659,24 @@ def collect():
 
     # ── 11. Rotación ──────────────────────────────────────────────────────────
     cleanup(conn)
+    conn.commit()
+
+    # ── 12. Gamificacion: evaluar logros y records ────────────────────────────
+    # Leer los ultimos 7 dias de daily_stats para los calculos de logros
+    daily = [
+        dict(r) for r in conn.execute(
+            "SELECT * FROM daily_stats ORDER BY date DESC LIMIT 7"
+        ).fetchall()
+    ]
+    snap_dict = {
+        "channels_active": ch_active,
+        "capacity_total":  cap_total,
+    }
+    evaluate_achievements(
+        conn, snap_dict, snap_id, ts,
+        fwd_count_cum, fwd_fees_cum,
+        zombie_count, chan_rows, daily
+    )
     conn.commit()
     conn.close()
 

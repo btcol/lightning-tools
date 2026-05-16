@@ -20,6 +20,7 @@ import dashboard_core as core
 
 SETTINGS_FILE = core.DATA_DIR / "ui_settings.json"
 
+# Carga la configuracion persistente desde el archivo JSON.
 def load_settings():
     try:
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
@@ -27,6 +28,7 @@ def load_settings():
     except:
         return {}
 
+# Guarda la configuracion en el archivo JSON de manera persistente.
 def save_settings(data):
     try:
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
@@ -36,18 +38,22 @@ def save_settings(data):
 
 class RedirectText:
     """Clase aux para redirigir stdout/stderr a un widget de texto."""
+    # Inicializa la clase principal, configura la UI y arranca los procesos.
     def __init__(self, text_widget):
         self.text_widget = text_widget
 
+    # Intercepta stdout para redirigirlo a la interfaz grafica si es necesario.
     def write(self, string):
         self.text_widget.insert(tk.END, string)
         self.text_widget.see(tk.END)
         self.text_widget.update_idletasks()
 
+    # Metodo requerido para la compatibilidad del stream redireccionado.
     def flush(self):
         pass
 
 class LightningDashboard(tk.Tk):
+    # Inicializa la clase principal, configura la UI y arranca los procesos.
     def __init__(self):
         super().__init__()
         self.title(" Lightning Network Dashboard — Cockpit HUD")
@@ -194,6 +200,7 @@ class LightningDashboard(tk.Tk):
         # Arrancar el hilo del piloto automático experimental
         threading.Thread(target=self._auto_rebalance_loop, daemon=True).start()
 
+    # Llama a getinfo de LND para comprobar el estado y pubkey del nodo local.
     def _detect_node(self):
         info = core.get_node_info()
         if info:
@@ -300,11 +307,13 @@ class LightningDashboard(tk.Tk):
         # Cargar métricas al inicio
         self.after(2000, self._cockpit_refresh_metrics)
 
+    # Dispara el script bash de escaneo de red de forma asincrona.
     def _action_scan_network(self):
         max_hops = int(self.var_hops.get())
         self.log_main.insert(tk.END, f"\n[] Iniciando escaneo de red hasta {max_hops} saltos...\n", "info")
         self.log_main.see(tk.END)
         
+        # Ejecuta un script en un hilo separado capturando logs en la UI.
         def run_script():
             script = core.SCRIPTS_DIR / "01_scan_network.sh"
             env = os.environ.copy()
@@ -323,6 +332,7 @@ class LightningDashboard(tk.Tk):
         
         threading.Thread(target=run_script, daemon=True).start()
 
+    # Activa o desactiva el bucle de auto-escaneo de red continuo.
     def _toggle_auto_scan(self):
         if self.var_auto_scan.get():
             self.log_main.insert(tk.END, f"\n[] Auto-escaneo activado cada {self.var_auto_scan_secs.get()} segundos.\n", "info")
@@ -330,6 +340,7 @@ class LightningDashboard(tk.Tk):
         else:
             self.log_main.insert(tk.END, "\n[[]] Auto-escaneo desactivado.\n")
 
+    # Bucle principal que orquesta el escaneo y el renderizado 3D en intervalos.
     def _auto_scan_loop(self):
         if not self.var_auto_scan.get():
             return
@@ -338,6 +349,7 @@ class LightningDashboard(tk.Tk):
         max_hops = int(self.var_hops.get())
         self.log_main.insert(tk.END, f"\n[] Auto-escaneo en curso ({datetime.now().strftime('%H:%M:%S')})...\n")
         
+        # Ciclo interno asincrono usado por el loop de auto-escaneo.
         def run_cycle():
             # Escaneo
             script = core.SCRIPTS_DIR / "01_scan_network.sh"
@@ -368,6 +380,7 @@ class LightningDashboard(tk.Tk):
 
         threading.Thread(target=run_cycle, daemon=True).start()
 
+    # Lanza el recolector de estadisticas historicas en background.
     def _collect_stats_async(self):
         """Lanza 04_collect_stats.sh en background y actualiza el indicador de estado."""
         stats_script = core.SCRIPTS_DIR / "04_collect_stats.sh"
@@ -378,6 +391,7 @@ class LightningDashboard(tk.Tk):
             )
             return
 
+        # Ejecucion delegada asincrona de subprocesos y comandos lentos.
         def _run():
             self.lbl_stats_status.config(
                 text="Historial: recolectando...",
@@ -431,11 +445,13 @@ class LightningDashboard(tk.Tk):
 
 
 
+    # Inicializa el timer para la recoleccion periodica autonoma de metricas.
     def _start_auto_stats_loop(self):
         """Inicia el loop autónomo de recolección de estadísticas."""
         # Primer snapshot con pequeño retraso para que LND esté listo
         self.after(5000, self._auto_stats_cycle)
 
+    # Bucle autonomo que toma un snapshot de metricas cada cierto tiempo.
     def _auto_stats_cycle(self):
         """Ciclo periódico autónomo: recolecta stats y se reprograma."""
         self._collect_stats_async()
@@ -445,6 +461,7 @@ class LightningDashboard(tk.Tk):
             interval_ms = self._stats_interval_secs * 1000
         self.after(interval_ms, self._auto_stats_cycle)
 
+    # Lee y actualiza en tiempo real la configuracion de intervalo de recoleccion.
     def _update_stats_interval(self):
         """Actualiza el intervalo del colector desde el campo de entrada."""
         try:
@@ -581,16 +598,20 @@ class LightningDashboard(tk.Tk):
 
     # -- Acciones Wallet ------------------------------------------------------
 
+    # Imprime un mensaje en la consola integrada de la pestaña de destino.
     def _wlog(self, msg):
         self.log_wallet.insert(tk.END, msg + "\n")
         self.log_wallet.see(tk.END)
 
+    # Recarga balances, UTXOs y estado de copias SCB simultaneamente.
     def _wallet_refresh_all(self):
         self._wallet_load_balance()
         self._wallet_load_utxos()
         self._wallet_update_scb_status()
 
+    # Pide y muestra los saldos confirmados y pendientes desde el nodo.
     def _wallet_load_balance(self):
+        # Funcion interna (closure) usada para ejecutar una llamada asincrona sin bloquear UI.
         def fetch():
             d = core.get_wallet_balance_detail()
             if d.get("error"):
@@ -620,9 +641,11 @@ class LightningDashboard(tk.Tk):
             self.lbl_w_warn.config(text=warn)
         threading.Thread(target=fetch, daemon=True).start()
 
+    # Carga y lista todos los UTXOs disponibles en la tabla de la interfaz.
     def _wallet_load_utxos(self):
         for row in self.tree_utxo.get_children():
             self.tree_utxo.delete(row)
+        # Funcion interna (closure) usada para ejecutar una llamada asincrona sin bloquear UI.
         def fetch():
             utxos = core.get_wallet_utxos(min_confs=0)
             total = sum(u["amount_sat"] for u in utxos)
@@ -641,6 +664,7 @@ class LightningDashboard(tk.Tk):
                 foreground=core.CLR_RED if n >= core.UTXO_FRAGMENT_WARN else core.CLR_SUBTEXT)
         threading.Thread(target=fetch, daemon=True).start()
 
+    # Solicita una nueva direccion on-chain al nodo (P2WKH por defecto).
     def _wallet_gen_address(self):
         type_map = {
             "p2wkh (bech32)":          "p2wkh",
@@ -648,6 +672,7 @@ class LightningDashboard(tk.Tk):
             "p2tr (taproot)":          "p2tr",
         }
         addr_type = type_map.get(self.var_addr_type.get(), "p2wkh")
+        # Funcion interna (closure) usada para ejecutar una llamada asincrona sin bloquear UI.
         def fetch():
             addr = core.get_new_address(addr_type)
             if addr:
@@ -657,6 +682,7 @@ class LightningDashboard(tk.Tk):
                 self._wlog("[!] No se pudo generar la direccion. Verifica que LND este activo.")
         threading.Thread(target=fetch, daemon=True).start()
 
+    # Copia la direccion recien generada al portapapeles del sistema operativo.
     def _wallet_copy_address(self):
         addr = self.var_new_addr.get().strip()
         if addr:
@@ -666,6 +692,7 @@ class LightningDashboard(tk.Tk):
         else:
             self._wlog("[!] Genera una direccion primero.")
 
+    # Inicia el proceso asincrono para enviar todos los UTXOs a una sola direccion.
     def _wallet_consolidate(self):
         try:
             fee = int(self.var_cons_fee.get().strip())
@@ -683,6 +710,7 @@ class LightningDashboard(tk.Tk):
             f"Esto enviara TODOS los UTXOs a:\n{dest}\n\nFee: {fee} sat/vbyte\n\nContinuar?"):
             return
         self._wlog(f"\nConsolidando UTXOs -> {dest[:20]}...")
+        # Hilo interno generico usado para no bloquear el MainLoop de Tkinter.
         def run():
             ok = core.execute_consolidate_utxos(dest, fee, self._wlog)
             if ok:
@@ -692,6 +720,7 @@ class LightningDashboard(tk.Tk):
                 self._wlog("\n[!] Fallo la consolidacion.")
         threading.Thread(target=run, daemon=True).start()
 
+    # Revisa los metadatos para mostrar la edad del ultimo respaldo automatico.
     def _wallet_update_scb_status(self):
         import time as _time
         auto_path = core.get_scb_auto_path()
@@ -718,10 +747,12 @@ class LightningDashboard(tk.Tk):
                 text="Ultimo backup manual: ninguno -- exporta uno ahora",
                 foreground=core.CLR_RED)
 
+    # Lanza el proceso manual para extraer el Static Channel Backup (SCB).
     def _wallet_export_scb(self):
         from datetime import datetime as _dt
         fname = f"channel_backup_{_dt.now().strftime('%Y%m%d_%H%M%S')}.bin"
         out_path = core.BACKUPS_DIR / fname
+        # Hilo interno generico usado para no bloquear el MainLoop de Tkinter.
         def run():
             self._wlog(f"\nExportando SCB -> {fname} ...")
             ok = core.export_channel_backup(out_path, self._wlog)
@@ -732,6 +763,7 @@ class LightningDashboard(tk.Tk):
                 self._wlog("[!] Error al exportar SCB.")
         threading.Thread(target=run, daemon=True).start()
 
+    # Abre el directorio de backups de SCB en el explorador de archivos del SO.
     def _wallet_open_backups_dir(self):
         import subprocess as _sp
         core.BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
@@ -774,11 +806,25 @@ class LightningDashboard(tk.Tk):
         if img_path.exists():
             try:
                 self.img_btcol = tk.PhotoImage(file=str(img_path))
-                ttk.Label(top, image=self.img_btcol).pack(pady=20)
+                ttk.Label(top, image=self.img_btcol).pack(pady=5)
             except Exception as e:
-                ttk.Label(top, text=f"[Imagen no soportada o con error: {e}]", foreground=core.CLR_RED).pack(pady=20)
+                ttk.Label(top, text=f"[Imagen no soportada o con error: {e}]", foreground=core.CLR_RED).pack(pady=5)
         else:
-            ttk.Label(top, text="[ln-cockpit-Small.png no encontrada]", foreground=core.CLR_RED).pack(pady=20)
+            ttk.Label(top, text="[ln-cockpit-Small.png no encontrada]", foreground=core.CLR_RED).pack(pady=5)
+
+        # ── Donación ──
+        don_frame = ttk.Frame(top)
+        don_frame.pack(pady=15)
+        ttk.Label(don_frame, text="🤝 Apoya el Proyecto", font=(core._FONT_UI, 12, "bold"), foreground=core.CLR_ACCENT).pack(pady=(0, 5))
+        ttk.Label(don_frame, text="Si estas herramientas open source te han sido de utilidad y quieres apoyar para que sigan\ncreciendo, ¡tu donación es bienvenida! Esto ayuda al mantenedor a seguir desarrollando.", justify=tk.CENTER, foreground=core.CLR_SUBTEXT).pack(pady=5)
+        
+        qr_path = core.BASE_DIR / "images" / "btcol_invoice.png"
+        if qr_path.exists():
+            try:
+                self.img_qr = tk.PhotoImage(file=str(qr_path))
+                ttk.Label(don_frame, image=self.img_qr).pack(pady=5)
+            except Exception as e:
+                pass
 
     # =========================================================================
     # PANEL C: SUGERENCIAS REBALANCEO
@@ -800,6 +846,7 @@ class LightningDashboard(tk.Tk):
         lbl_ratio_val = ttk.Label(frame_ratio, text=f"{saved_ratio}/{100-saved_ratio}", foreground=core.CLR_ACCENT)
         lbl_ratio_val.pack(side=tk.RIGHT, padx=5)
         
+        # Evento disparado al mover la barra de configuracion del ratio deseado.
         def on_ratio_change(val):
             v = int(float(val))
             lbl_ratio_val.config(text=f"{v}/{100-v}")
@@ -898,10 +945,12 @@ class LightningDashboard(tk.Tk):
         self.log_exec = scrolledtext.ScrolledText(self.tab_suggest, height=10, bg=core.CLR_BG, fg=core.CLR_TEXT, font=(core._FONT_MONO, 11))
         self.log_exec.pack(fill=tk.BOTH, expand=True, pady=5)
 
+    # Consume el modulo central para traer las sugerencias de rebalanceo ordenadas.
     def _action_calc_suggestions(self):
         for row in self.tree_sug.get_children():
             self.tree_sug.delete(row)
             
+        # Funcion interna (closure) usada para ejecutar una llamada asincrona sin bloquear UI.
         def fetch():
             channels = core.get_channels()
             if not channels:
@@ -921,6 +970,7 @@ class LightningDashboard(tk.Tk):
                 
         threading.Thread(target=fetch, daemon=True).start()
 
+    # Rellena automaticamente el formulario desde la sugerencia seleccionada en la tabla.
     def _on_suggestion_double_click(self, event):
         item = self.tree_sug.selection()
         if not item: return
@@ -933,6 +983,7 @@ class LightningDashboard(tk.Tk):
         self.var_to_pub.set(sug["to_pub"])
         self.var_amt.set(str(sug["amount"]))
 
+    # Simula el rebalanceo propuesto para pre-calcular los fees y validar margenes.
     def _action_simulate_fee(self):
         try:
             amt = int(self.var_amt.get())
@@ -956,6 +1007,7 @@ class LightningDashboard(tk.Tk):
             self.log_exec.insert(tk.END, f" AVISO: El fee esperado supera el límite.\n")
         self.log_exec.see(tk.END)
 
+    # Lanza el script de rebalanceo real (creacion de invoice y pago enrutado).
     def _action_execute_reb(self):
         fscid = self.var_from.get().strip()
         tpub  = self.var_to_pub.get().strip()
@@ -974,6 +1026,7 @@ class LightningDashboard(tk.Tk):
             messagebox.showerror("Error", "Valores deben ser positivos.")
             return
 
+        # Interfaz callback de logging para imprimir mensajes de progreso de hilos.
         def logger(msg):
             self.log_exec.insert(tk.END, msg + "\n")
             self.log_exec.see(tk.END)
@@ -983,6 +1036,7 @@ class LightningDashboard(tk.Tk):
         logger(f"   TO   {tpub[:20]}...")
         logger(f"   AMT  {amt:,} sats\n")
 
+        # Proceso interno que ejecuta el rebalanceo de forma bloqueante dentro de su thread.
         def run_reb():
             success = core.execute_rebalance(fscid, tpub, amt, fee, logger)
             if success:
@@ -992,6 +1046,7 @@ class LightningDashboard(tk.Tk):
                 
         threading.Thread(target=run_reb, daemon=True).start()
 
+    # Activa/desactiva el piloto automatico experimental de rebalanceos en background.
     def _on_auto_reb_toggle(self):
         if self.var_auto_reb.get():
             self.var_amt.set("1000")
@@ -1004,6 +1059,7 @@ class LightningDashboard(tk.Tk):
             self.log_exec.insert(tk.END, f"\n[{datetime.now().strftime('%H:%M:%S')}] [AUTO-PILOTO] Desactivado.\n")
             self.log_exec.see(tk.END)
 
+    # Bucle recursivo asincrono para rebalanceos continuos automáticos.
     def _auto_rebalance_loop(self):
         import time
         import random
@@ -1027,6 +1083,7 @@ class LightningDashboard(tk.Tk):
                 
             self.last_auto_reb_time = now
             
+            # Interfaz callback de logging para imprimir mensajes de progreso de hilos.
             def logger(msg):
                 self.log_exec.insert(tk.END, msg + "\n")
                 self.log_exec.see(tk.END)
@@ -1201,7 +1258,9 @@ class LightningDashboard(tk.Tk):
 
         self.after(1000, self._action_refresh_wallet)
 
+    # Actualiza solo el saldo enfocado para la pantalla de apertura de canales.
     def _action_refresh_wallet(self):
+        # Funcion interna (closure) usada para ejecutar una llamada asincrona sin bloquear UI.
         def fetch():
             data = core.get_wallet_balance()
             conf = data.get("confirmed_balance", 0)
@@ -1212,6 +1271,7 @@ class LightningDashboard(tk.Tk):
                 self.lbl_wallet.config(text="No se pudo obtener el saldo.")
         threading.Thread(target=fetch, daemon=True).start()
 
+    # Conecta el nodo a un peer remoto (lncli connect) pero no abre canal todavia.
     def _action_connect_only(self):
         """Establece solo la conexión P2P con el nodo externo (sin abrir canal)."""
         uri = self.var_ext_uri.get().strip()
@@ -1224,6 +1284,7 @@ class LightningDashboard(tk.Tk):
                 "Ejemplo: 02ebe2b...9859@54.244.234.100:19996")
             return
 
+        # Interfaz callback de logging para imprimir mensajes de progreso de hilos.
         def logger(msg):
             self.log_open.insert(tk.END, msg + "\n")
             self.log_open.see(tk.END)
@@ -1231,6 +1292,7 @@ class LightningDashboard(tk.Tk):
         logger(f"\n[{datetime.now().strftime('%H:%M:%S')}]  Conectando a nodo externo...")
         logger(f"   URI: {uri}\n")
 
+        # Hilo interno generico usado para no bloquear el MainLoop de Tkinter.
         def run():
             ok = core.execute_connect(uri, logger)
             if ok:
@@ -1243,6 +1305,7 @@ class LightningDashboard(tk.Tk):
 
         threading.Thread(target=run, daemon=True).start()
 
+    # Intenta conectar con el peer y a continuacion procede a abrir un canal.
     def _action_connect_and_open(self):
         """Conecta al nodo externo y abre un canal en un solo paso."""
         uri = self.var_ext_uri.get().strip()
@@ -1280,6 +1343,7 @@ class LightningDashboard(tk.Tk):
 
         pubkey = uri.split("@")[0]
 
+        # Interfaz callback de logging para imprimir mensajes de progreso de hilos.
         def logger(msg):
             self.log_open.insert(tk.END, msg + "\n")
             self.log_open.see(tk.END)
@@ -1292,6 +1356,7 @@ class LightningDashboard(tk.Tk):
         else:
             logger("\n")
 
+        # Hilo interno generico usado para no bloquear el MainLoop de Tkinter.
         def run():
             success = core.execute_openchannel(pubkey, amt, logger, host_uri=uri, push_amt=push_amt)
             if success:
@@ -1302,6 +1367,7 @@ class LightningDashboard(tk.Tk):
 
         threading.Thread(target=run, daemon=True).start()
 
+    # Escanea los nodos cercanos para sugerir prospectos estables y conectados.
     def _action_scan_candidates(self):
 
         for row in self.tree_cand.get_children():
@@ -1314,6 +1380,7 @@ class LightningDashboard(tk.Tk):
             messagebox.showerror("Error", "Mínimo de canales y máximo de días deben ser números enteros.")
             return
             
+        # Funcion interna (closure) usada para ejecutar una llamada asincrona sin bloquear UI.
         def fetch():
             cands = core.get_channel_candidates(min_channels=min_c, max_days=max_d)
             self.current_candidates = cands
@@ -1333,6 +1400,7 @@ class LightningDashboard(tk.Tk):
                 
         threading.Thread(target=fetch, daemon=True).start()
 
+    # Rellena la pubkey para apertura basandose en el nodo seleccionado.
     def _on_candidate_double_click(self, event):
         item = self.tree_cand.selection()
         if not item: return
@@ -1340,6 +1408,7 @@ class LightningDashboard(tk.Tk):
         cand = self.current_candidates[idx]
         self.var_open_pubkey.set(cand["pubkey"])
 
+    # Inicia un hilo para firmar e inyectar en mempool la transaccion de nuevo canal.
     def _action_open_channel(self):
         pubkey = self.var_open_pubkey.get().strip()
         amt_str = self.var_open_amt.get().strip()
@@ -1368,6 +1437,7 @@ class LightningDashboard(tk.Tk):
             if not messagebox.askyesno("Confirmar Push Amount", msg, icon='warning'):
                 return
             
+        # Interfaz callback de logging para imprimir mensajes de progreso de hilos.
         def logger(msg):
             self.log_open.insert(tk.END, msg + "\n")
             self.log_open.see(tk.END)
@@ -1380,6 +1450,7 @@ class LightningDashboard(tk.Tk):
         else:
             logger("\n")
 
+        # Hilo que invoca openchannel en segundo plano reportando avances a la GUI.
         def run_open():
             success = core.execute_openchannel(pubkey, amt, logger, push_amt=push_amt)
             if success:
@@ -1445,10 +1516,12 @@ class LightningDashboard(tk.Tk):
         
         self.after(1500, self._action_refresh_close_channels)
 
+    # Lista todos los canales existentes (pendientes, activos, inactivos) a cerrar.
     def _action_refresh_close_channels(self):
         for row in self.tree_close.get_children():
             self.tree_close.delete(row)
             
+        # Funcion interna (closure) usada para ejecutar una llamada asincrona sin bloquear UI.
         def fetch():
             chans = core.get_all_channels()
             self.current_close_channels = chans
@@ -1465,6 +1538,7 @@ class LightningDashboard(tk.Tk):
                 
         threading.Thread(target=fetch, daemon=True).start()
 
+    # Carga el chanpoint del canal que fue clickeado doblemente en la tabla.
     def _on_close_candidate_double_click(self, event):
         item = self.tree_close.selection()
         if not item: return
@@ -1472,6 +1546,7 @@ class LightningDashboard(tk.Tk):
         cand = self.current_close_channels[idx]
         self.var_close_chanpoint.set(cand["chan_point"])
 
+    # Dispara la operacion cooperativa (o force) para cerrar y reclamar un canal.
     def _action_close_channel(self):
         chanpoint = self.var_close_chanpoint.get().strip()
         force = self.var_close_force.get()
@@ -1484,6 +1559,7 @@ class LightningDashboard(tk.Tk):
             ans = messagebox.askyesno("Confirmar Force Close", "ATENCIÓN: Un force close bloqueará tus fondos por un tiempo y puede requerir más comisiones.\n\n¿Estás seguro de forzar el cierre de este canal?")
             if not ans: return
             
+        # Interfaz callback de logging para imprimir mensajes de progreso de hilos.
         def logger(msg):
             self.log_close.insert(tk.END, msg + "\n")
             self.log_close.see(tk.END)
@@ -1491,6 +1567,7 @@ class LightningDashboard(tk.Tk):
         logger(f"\n[{datetime.now().strftime('%H:%M:%S')}] Iniciando Cierre de Canal {'(FORCE)' if force else ''} ")
         logger(f"   Channel Point: {chanpoint[:25]}...\n")
 
+        # Rutina de hilo asincrono para manejar el proceso de cierre y logs del mismo.
         def run_close():
             success = core.execute_closechannel(chanpoint, force, logger)
             if success:
@@ -1501,19 +1578,23 @@ class LightningDashboard(tk.Tk):
                 
         threading.Thread(target=run_close, daemon=True).start()
 
+    # Refresca en pantalla los totales resumidos de canales y saldo sin hacer redibujo 3D.
     def _cockpit_refresh_metrics(self):
         """Actualiza los labels de métricas del cockpit leyendo node_history.db."""
+        # Funcion interna (closure) usada para ejecutar una llamada asincrona sin bloquear UI.
         def fetch():
             try:
                 stats = core.read_history_stats()
                 snap  = stats.get("snap", {})
 
+                # Utilidad para formatear enteros o flotantes grandes como satoshis legibles.
                 def fmt_sat(n):
                     n = int(n or 0)
                     if n >= 1_000_000: return f"{n/1e6:.2f}M sats"
                     if n >= 1_000:     return f"{n/1e3:.1f}k sats"
                     return f"{n} sats"
 
+                # Utilidad auxiliar para transformar mili-satoshis a satoshis en UI.
                 def fmt_msat(n):
                     n = int(n or 0)
                     if n >= 1_000_000_000: return f"{n/1e9:.2f}M sat"
@@ -1557,14 +1638,17 @@ class LightningDashboard(tk.Tk):
 
         threading.Thread(target=fetch, daemon=True).start()
 
+    # Abre en el navegador o visor interno el mapa HTML interactivo.
     def _action_open_cockpit(self):
         """Genera el cockpit HTML y lo abre en el navegador."""
         cockpit_path = core.EXPORTS_DIR / "lightning_cockpit.html"
 
+        # Canaliza logs del core generator directo al visualizador en pantalla de Tk.
         def log_ui(msg):
             self.log_main.insert(tk.END, msg + "\n")
             self.log_main.see(tk.END)
 
+        # Ejecuta la renderizacion de html 3D desde un hilo hijo para evitar bloqueos de UI.
         def generate():
             log_ui(f"\n[{datetime.now().strftime('%H:%M:%S')}] Generando Cockpit HUD...")
             ok = core.generate_cockpit_html(

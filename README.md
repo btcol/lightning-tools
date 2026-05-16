@@ -3,7 +3,10 @@
 ![Lightning Dashboard](lightning-dashboard/images/ln-cockpit-Big.png)
 
 > [!IMPORTANT]
-> **🚀 NUEVA VERSIÓN GRÁFICA:** Te sugerimos encarecidamente dirigirte a la subcarpeta [`lightning-dashboard`](./lightning-dashboard/). Allí encontrarás una interfaz gráfica (GUI) unificada que contiene elementos nuevos y procesos mucho más automatizados (gestión de billetera on-chain, apertura inteligente de canales con Push Amount, rebalanceo circular predictivo y métricas en tiempo real) que reemplazan el uso de los scripts individuales de este directorio.
+> **🌐 NUEVA VERSIÓN WEB (VPS-Ready & Responsive):** Si administras tu nodo en un servidor remoto sin entorno de escritorio, dirígete a la subcarpeta [`lightning-web`](./lightning-web/). Ofrece un dashboard web unificado con **diseño adaptable a móviles**, dando acceso a todas las herramientas (billetera, piloto automático de rebalanceo, métricas y el Cockpit 3D) desde cualquier navegador.
+
+> [!IMPORTANT]
+> **🖥️ NUEVA VERSIÓN GRÁFICA (Desktop):** Si utilizas un sistema con entorno de ventanas, utiliza la subcarpeta [`lightning-dashboard`](./lightning-dashboard/). Contiene una interfaz gráfica (GUI) unificada y automatizada basada en Tkinter.
 
 Multiples herramientas para administrar de forma mas amigable los nodos en Lightning Network, basado en comandos LNCLI y Python.
 
@@ -13,13 +16,9 @@ Este directorio contiene herramientas primarias de CLI (línea de comandos) para
 
 ## Configuración Universal (.env)
 
-Ajusta las variables de entorno según tu sistema operativo. El repositorio incluye un sistema centralizado mediante un archivo `.env`.
-Antes de usar los scripts o el dashboard, copia el archivo de ejemplo y edítalo si usas una red diferente (como `mainnet` o `signet`) o si el nombre de tus binarios difiere:
+Ajusta las variables de entorno según tu sistema operativo. Anteriormente se usaba un único `.env` en la raíz, pero ahora **cada subproyecto (`lightning-dashboard` y `lightning-web`) cuenta con su propio archivo `.env` independiente**.
 
-```bash
-cp .env.example .env
-```
-Todos los scripts (Bash y Python) tomarán de ahí las variables `NETWORK`, `LNCLI_BIN` y `BITCOIN_CLI_BIN`.
+Antes de usar los dashboards, copia el archivo `.env.example` o configura el archivo `.env` correspondiente dentro de la subcarpeta que vayas a utilizar. Allí se configuran credenciales, red (`NETWORK`) y las rutas a los binarios (`LNCLI_BIN` y `BITCOIN_CLI_BIN`).
 
 ## Funcionamiento del Software
 El conjunto de utilidades funciona interactuando directamente con la interfaz de línea de comandos (CLI) de `lnd` (`lncli`) y `bitcoind`. Los scripts bash se encargaban de la comunicación de bajo nivel para administrar operaciones diarias (consultas de peers, pagos on-chain, generación de facturas). Paralelamente, los scripts de Python asumian las tareas computacionalmente pesadas: procesaban el grafo público de canales mediante algoritmos de búsqueda, filtraban topologías complejas y estructuran los datos para generar representaciones visuales interactivas en 3D de la Lightning Network de manera local sin depender de servidores externos.
@@ -39,6 +38,14 @@ Instala usando:
 pip install -r requirements.txt
 ```
 Además requiere de `bitcoin-cli`, `lnd`, `lncli`, y utilería como `jq` instalados a nivel sistema u operativos localmente como `lncli-debug`.
+
+---
+
+## Apoya el Proyecto
+
+Si estas herramientas de código abierto te han sido de utilidad y quieres ayudar a que el proyecto siga creciendo, ¡tu apoyo es muy bienvenido! El desarrollador principal (actualmente desempleado) te lo agradecerá inmensamente, lo que le permitirá continuar dedicando tiempo a crear y mantener estas y más herramientas para la comunidad.
+
+<img src="btcol_invoice.svg" width="200" alt="QR de Donación Lightning">
 
 ---
 

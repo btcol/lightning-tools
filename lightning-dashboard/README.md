@@ -11,7 +11,7 @@ El dashboard funciona como un orquestador central que se comunica de manera así
 2. **🌐 Red & Cockpit HUD**: Orquesta el escaneo del public graph. Despliega un modelo orbital astronómico 3D de tu nodo e integra la generación de un Cockpit HTML interactivo (Heads-Up Display) para monitorear en tiempo real métricas clave de rentabilidad, canales zombies, liquidez y uptime basados en tu historial.
 3. **👛 Wallet On-chain**: Control centralizado de tu liquidez en capa base. Permite monitorear balances confirmados/no-confirmados, generar nuevas direcciones, detectar alta fragmentación y consolidar UTXOs con comisiones personalizadas. También gestiona la exportación manual y visualiza el estado de los Backups Estáticos de Canales (SCB).
 4. **⚖️ Sugerencias de Rebalanceo**: Módulo automatizado predictivo. Deduce el origen (excedente local) y destinos (excedente remoto) y sugiere combinaciones ideales de balanceo circular interno.
-5. **🔄 Ejecutar Rebalanceo**: Control manual para la creación automática de invoices de retorno y pagos auto-enrutados estableciendo topes configurables en SATs o PPM. Incluye simulación de rentabilidad y un log central de fácil lectura.
+5. **🔄 Ejecutar Rebalanceo**: Control manual para pagos auto-enrutados con simulación de rentabilidad. Incluye además un **Piloto Automático Experimental** que ejecuta rebalanceos periódicos en segundo plano tomando las mejores sugerencias y escalando tarifas dinámicamente.
 6. **🔌 Apertura de Canales (Smart Open)**: Módulo integrador que lee al vuelo tu saldo onchain para permitir conexiones a nodos top (1ml/amboss). Incluye **filtros dinámicos integrados en la interfaz** (Mínimo de canales y Máximo de días desde el último gossip) para rastrear inteligentemente y sugerir candidatos óptimos desde el public graph, automatizando `connect`, `openchannel` y el envío de liquidez inicial (**Push Amount**).
 7. **❌ Cierre de Canales**: Interfaz unificada para gestionar cierres cooperativos o unilaterales (Force Close). Permite visualizar el estado de canales inactivos, pendientes o bloqueados en "WaitClose" y proceder con un clic.
 
@@ -19,11 +19,11 @@ El dashboard funciona como un orquestador central que se comunica de manera así
 Asegúrate de que tus demonios LND y Bitcoin estén listos en el background.
 
 **Configuración:**
-1. Copia el archivo de configuración de ejemplo que se encuentra en la raíz del repositorio:
+1. Copia el archivo de configuración de ejemplo que se encuentra en la raíz del repositorio hacia la carpeta actual del dashboard:
    ```bash
-   cp ../.env.example ../.env
+   cp ../.env.example .env
    ```
-2. Edita `../.env` para ajustar la red (`NETWORK`) y los binarios de ejecución si es necesario (`LNCLI_BIN`, `BITCOIN_CLI_BIN`).
+2. Edita `.env` localmente para ajustar la red (`NETWORK`) y los binarios de ejecución si es necesario (`LNCLI_BIN`, `BITCOIN_CLI_BIN`).
 
 **Dependencias:**
 ```bash
@@ -39,6 +39,12 @@ python3 lightning_dashboard.py
 - `dashboard_core.py`: Lógica profunda enrutadora. Controla subprocess execution y transformaciones Graph a data models de visualización.
 - `lightning_dashboard.py`: Contrucción declarativa de Widgets utilizando Tkinter (`ttk`). Define Threads asincrónicos para no bloquear la app.
 - `scripts/`: Wrappers bash (`01_scan_network.sh`, etc.) modularizados con finalidades de reporting estructurado para el core Python. Mantenidos por legibilidad y compatibilidad legacy.
+
+## Apoya el Proyecto
+
+Si estas herramientas de código abierto te han sido de utilidad y quieres ayudar a que el proyecto siga creciendo, ¡tu apoyo es muy bienvenido! El desarrollador principal (actualmente desempleado) te lo agradecerá inmensamente, lo que le permitirá continuar dedicando tiempo a crear y mantener estas y más herramientas para la comunidad.
+
+<img src="images/btcol_invoice.png" width="200" alt="QR de Donación Lightning">
 
 ## Créditos y Derechos de Uso
 

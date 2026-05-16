@@ -41,6 +41,7 @@ BACKUPS_DIR  = BASE_DIR / "backups"
 # CONFIGURACIÓN GLOBAL
 # =============================================================================
 
+# Carga variables de un archivo .env al entorno os.environ, ignorando lineas vacias o comentadas.
 def load_env_file(env_path):
     if not env_path.exists():
         return
@@ -59,9 +60,8 @@ def load_env_file(env_path):
     except Exception as e:
         print(f"[WARN] No se pudo cargar {env_path}: {e}")
 
-# Intentar cargar .env desde la raíz del proyecto
-_ROOT_DIR = BASE_DIR.parent
-load_env_file(_ROOT_DIR / ".env")
+# Cargar .env desde el propio directorio del proyecto (lightning-dashboard/.env)
+load_env_file(BASE_DIR / ".env")
 
 # Red y binario lncli (sobreescribibles via variables de entorno)
 NETWORK   = os.environ.get("NETWORK",   "testnet4")
@@ -102,6 +102,7 @@ _FONT_MONO = "DejaVu Sans Mono"
 # UTILIDADES GENERALES
 # =============================================================================
 
+# Ejecuta un comando de lncli como subproceso, captura su salida JSON y maneja errores o timeouts.
 def run_lncli(*args, timeout=30):
     """
     Ejecuta lncli-debug con los argumentos dados y devuelve el JSON parseado.
@@ -119,6 +120,7 @@ def run_lncli(*args, timeout=30):
         raise RuntimeError(f"Timeout ejecutando: {' '.join(cmd)}")
 
 
+# Convierte un Short Channel ID (SCID) de formato 'bloque:transaccion:salida' a entero uint64.
 def scid_to_uint64(scid: str) -> int:
     """
     Convierte un SCID en formato 'blockxTxIndexxVout' (ej: '129925x3x0')
@@ -129,6 +131,7 @@ def scid_to_uint64(scid: str) -> int:
     return (block << 40) | (tx << 16) | vout
 
 
+# Formatea un numero entero a string con separadores de miles y el sufijo 'sats'.
 def fmt_sats(n) -> str:
     try:
         return f"{int(n):,} sats"
@@ -136,6 +139,7 @@ def fmt_sats(n) -> str:
         return "? sats"
 
 
+# Calcula la cantidad de dias transcurridos desde un timestamp (Unix) hasta el momento actual.
 def days_since(ts) -> int:
     try:
         return int((datetime.now(timezone.utc).timestamp() - int(ts)) / 86400)
@@ -143,6 +147,7 @@ def days_since(ts) -> int:
         return 9999
 
 
+# Obtiene la informacion basica del nodo (getinfo) usando lncli.
 def get_node_info():
     try:
         return run_lncli("getinfo", timeout=10)
@@ -150,6 +155,7 @@ def get_node_info():
         return None
 
 
+# Devuelve la lista de canales abiertos activos e inactivos (listchannels) desde LND.
 def get_channels():
     try:
         data = run_lncli("listchannels")
@@ -158,6 +164,7 @@ def get_channels():
         return []
 
 
+# Obtiene el saldo total, confirmado y no confirmado de la billetera on-chain (walletbalance).
 def get_wallet_balance():
     try:
         return run_lncli("walletbalance", timeout=10)
@@ -165,6 +172,7 @@ def get_wallet_balance():
         return {}
 
 
+# Devuelve todos los canales (activos, inactivos, pendientes y en proceso de cierre) del nodo.
 def get_all_channels():
     channels = []
     
@@ -242,6 +250,7 @@ def get_all_channels():
     return channels
 
 
+# Ejecuta el comando lncli closechannel de forma cooperativa o forzada (Force Close).
 def execute_closechannel(chan_point: str, force: bool, log_callback) -> bool:
     log = log_callback
     log(f"[{datetime.now().strftime('%H:%M:%S')}] Petición de cierre para {chan_point} ...")
@@ -288,6 +297,7 @@ def execute_closechannel(chan_point: str, force: bool, log_callback) -> bool:
 # LÓGICA DE REBALANCEO
 # =============================================================================
 
+# Analiza los canales y sugiere pares optimos para rebalanceo circular segun un ratio deseado.
 def suggest_rebalances(channels: list, target_ratio=TARGET_RATIO,
                        min_shift=MIN_SHIFT_SATS, max_options=20) -> list:
     enriched = []
@@ -343,6 +353,7 @@ def suggest_rebalances(channels: list, target_ratio=TARGET_RATIO,
     return suggestions[:max_options]
 
 
+# Simula y calcula la rentabilidad y costo esperado de un rebalanceo basandose en las tarifas (fees).
 def fee_analysis(amt_sats: int, max_fee_sats: int, max_fee_ppm: int) -> dict:
     if amt_sats <= 0:
         return {}
@@ -357,6 +368,7 @@ def fee_analysis(amt_sats: int, max_fee_sats: int, max_fee_ppm: int) -> dict:
     }
 
 
+# Genera un invoice y ejecuta un pago auto-enrutado (rebalanceo circular) entre dos canales especificos.
 def execute_rebalance(from_scid: str, to_pub: str, amt_sats: int,
                       max_fee_sats: int, log_callback) -> bool:
     log = log_callback
@@ -428,6 +440,7 @@ def execute_rebalance(from_scid: str, to_pub: str, amt_sats: int,
         return False
 
 
+# Analiza el grafo publico (describegraph) y sugiere nodos candidatos optimos para abrir nuevos canales.
 def get_channel_candidates(min_channels=2, max_days=60):
     """
     Lee la red desde el graph local (getnetworkinfo / describegraph) para
@@ -492,6 +505,7 @@ def get_channel_candidates(min_channels=2, max_days=60):
     return candidates[:100]
 
 
+# Conecta este nodo con un peer remoto usando su URI (pubkey@host:port).
 def execute_connect(uri: str, log_callback) -> bool:
     """
     Establece una conexión P2P con un nodo usando su URI completa (pubkey@host:port).
@@ -519,6 +533,7 @@ def execute_connect(uri: str, log_callback) -> bool:
         return False
 
 
+# Abre un nuevo canal on-chain hacia una pubkey especifica, permitiendo opcionalmente un push_amt.
 def execute_openchannel(pubkey: str, amt_sats: int, log_callback,
                         host_uri: str = None, push_amt: int = 0) -> bool:
     """
@@ -617,6 +632,7 @@ WALLET_MIN_RESERVE_SATS = 50_000
 UTXO_FRAGMENT_WARN = 10
 
 
+# Devuelve el saldo detallado de la billetera on-chain, incluyendo saldos pendientes de cierres.
 def get_wallet_balance_detail() -> dict:
     """
     Retorna balance on-chain detallado incluyendo:
@@ -659,6 +675,7 @@ def get_wallet_balance_detail() -> dict:
     return result
 
 
+# Devuelve la lista de UTXOs (Unspent Transaction Outputs) de la billetera del nodo.
 def get_wallet_utxos(min_confs: int = 0) -> list:
     """
     Lista todos los UTXOs de la wallet on-chain via lncli listunspent.
@@ -708,6 +725,7 @@ def get_wallet_utxos(min_confs: int = 0) -> list:
 
 
 
+# Genera una nueva direccion on-chain (por defecto p2wkh) en la billetera de LND.
 def get_new_address(addr_type: str = "p2wkh") -> str:
     """
     Genera una nueva direccion on-chain para recibir fondos.
@@ -721,6 +739,7 @@ def get_new_address(addr_type: str = "p2wkh") -> str:
         return ""
 
 
+# Envia todos los fondos disponibles on-chain a una sola direccion para consolidar UTXOs.
 def execute_consolidate_utxos(dest_addr: str, sat_per_vbyte: int,
                                log_callback) -> bool:
     """
@@ -760,6 +779,7 @@ def execute_consolidate_utxos(dest_addr: str, sat_per_vbyte: int,
         return False
 
 
+# Exporta el Static Channel Backup (SCB) actual del nodo a un archivo binario especificado.
 def export_channel_backup(output_path: Path, log_callback) -> bool:
     """
     Exporta el Static Channel Backup (SCB) de todos los canales activos.
@@ -788,12 +808,14 @@ def export_channel_backup(output_path: Path, log_callback) -> bool:
         return False
 
 
+# Devuelve la ruta por defecto donde LND guarda los respaldos automaticos de canales (channel.backup).
 def get_scb_auto_path() -> Path:
     """Retorna la ruta del SCB automatico que mantiene LND."""
     lnd_dir = Path.home() / ".lnd" / "data" / "chain" / "bitcoin" / NETWORK
     return lnd_dir / "channel.backup"
 
 
+# Lee y calcula metricas historicas de rentabilidad y salud del nodo desde la base de datos SQLite.
 def read_history_stats(db_path: Path = None) -> dict:
     """
     Lee node_history.db y devuelve un dict con las métricas para el cockpit HUD.
@@ -874,10 +896,125 @@ def read_history_stats(db_path: Path = None) -> dict:
         return empty
 
 
+# Lee el estado de gamificacion del nodo: logros, records, XP calculado y puntuacion de salud.
+def read_gamification_status(db_path: Path = None) -> dict:
+    """
+    Devuelve el estado completo del sistema de gamificacion:
+    - achievements: lista de todos los logros con estado desbloqueado/bloqueado
+    - records: records personales historicos
+    - xp: puntos de experiencia calculados
+    - health: puntuacion de salud del nodo (0-100)
+    - rank: rango actual del operador
+    """
+    if db_path is None:
+        db_path = DATA_DIR / "node_history.db"
+
+    empty = {
+        "achievements": [],
+        "records": {},
+        "xp": 0,
+        "health": 0,
+        "rank": "Aprendiz de Satoshi",
+        "rank_level": 0,
+    }
+    if not db_path.exists():
+        return empty
+
+    try:
+        conn = _sqlite3.connect(db_path)
+        conn.row_factory = _sqlite3.Row
+
+        # Leer todos los logros con su estado de desbloqueo
+        achievements = [
+            dict(r) for r in conn.execute(
+                "SELECT id, name, description, emoji, unlocked_at FROM achievements ORDER BY unlocked_at ASC"
+            ).fetchall()
+        ]
+
+        # Leer records personales
+        records = {
+            r["key"]: {"value": r["value"], "achieved_at": r["achieved_at"]}
+            for r in conn.execute("SELECT * FROM records").fetchall()
+        }
+
+        # Leer ultimo snapshot para calcular salud
+        snap = conn.execute(
+            "SELECT * FROM snapshots ORDER BY ts DESC LIMIT 1"
+        ).fetchone()
+        snap = dict(snap) if snap else {}
+
+        # Leer daily_stats para XP y salud
+        daily_7d = [
+            dict(r) for r in conn.execute(
+                "SELECT * FROM daily_stats ORDER BY date DESC LIMIT 7"
+            ).fetchall()
+        ]
+
+        conn.close()
+
+        # ── Calcular XP ──────────────────────────────────────────────────────
+        # 1 XP por cada forward enrutado
+        xp = snap.get("fwd_count_cum", 0)
+        # 10 XP por cada 1000 sats de fees ganadas
+        fees_cum_sats = snap.get("fwd_fees_cum_msat", 0) // 1000
+        xp += (fees_cum_sats // 1000) * 10
+        # 50 XP por cada logro desbloqueado
+        unlocked_count = sum(1 for a in achievements if a["unlocked_at"] is not None)
+        xp += unlocked_count * 50
+
+        # ── Calcular Salud (0-100) ────────────────────────────────────────────
+        health = 100
+        # Penalizacion por canales zombie (-10 por zombie, max -40)
+        zombie_pen = min(40, snap.get("zombie_channels", 0) * 10)
+        health -= zombie_pen
+        # Penalizacion por liquidez muy desbalanceada (<20% o >80%)
+        liq = snap.get("liquidity_ratio", 50)
+        if liq < 20 or liq > 80:
+            health -= 20
+        elif liq < 30 or liq > 70:
+            health -= 10
+        # Penalizacion por desconexion reciente
+        recent_disc = sum(d.get("disconnections", 0) for d in daily_7d)
+        health -= min(20, recent_disc * 5)
+        # Bonus por uptime perfecto
+        if not recent_disc and len(daily_7d) >= 3:
+            health = min(100, health + 5)
+        health = max(0, health)
+
+        # ── Rango basado en XP ───────────────────────────────────────────────
+        RANKS = [
+            (0,    "Aprendiz de Satoshi",  0),
+            (50,   "Novato del Rayo",       1),
+            (200,  "Enrutador Activo",      2),
+            (500,  "Maestro de Liquidez",   3),
+            (1000, "Hub de la Red",         4),
+        ]
+        rank_name, rank_level = RANKS[0][1], RANKS[0][2]
+        for threshold, name, level in RANKS:
+            if xp >= threshold:
+                rank_name, rank_level = name, level
+
+        return {
+            "achievements": achievements,
+            "records": records,
+            "xp": xp,
+            "health": health,
+            "rank": rank_name,
+            "rank_level": rank_level,
+            "unlocked_count": unlocked_count,
+            "total_achievements": len(achievements),
+        }
+
+    except Exception as e:
+        print(f"[WARN] read_gamification_status: {e}", file=_sys.stderr)
+        return empty
+
+
 # =============================================================================
 # VISUALIZACIÓN 3D
 # =============================================================================
 
+# Procesa un CSV con el grafo de la red y genera un archivo HTML con la visualizacion 3D interactiva.
 def generate_3d_html(csv_path: Path, html_path: Path,
                      my_pubkey: str = None, log_cb=print) -> bool:
     if not HAS_PLOTLY:
@@ -2006,6 +2143,7 @@ Muy desactualizado = colector no está corriendo.">
 """
 
 
+# Genera el panel HTML del Cockpit HUD inyectando metricas y la visualizacion 3D de la red.
 def generate_cockpit_html(csv_path: Path = None, cockpit_path: Path = None,
                           my_pubkey: str = None, log_cb=print,
                           skip_graph: bool = False) -> bool:
